@@ -7,51 +7,8 @@ const DEFAULTS = {
   fuelPriceLiter: 1.65,
   fuelConsumption: 7,
   hotelPerNight: 175,
-  tollPer100Km: 9,
-  fallbackAvgSpeedKmh: 88
+  tollPer100Km: 9
 };
-
-const LOCAL_LOCATION_INDEX = [
-  { name: 'Berlin', lat: 52.5200, lng: 13.4050, aliases: ['berlin'] },
-  { name: 'Hamburg', lat: 53.5511, lng: 9.9937, aliases: ['hamburg'] },
-  { name: 'Muenchen', lat: 48.1374, lng: 11.5755, aliases: ['muenchen', 'munich', 'münchen'] },
-  { name: 'Frankfurt am Main', lat: 50.1109, lng: 8.6821, aliases: ['frankfurt', 'frankfurt am main'] },
-  { name: 'Koeln', lat: 50.9375, lng: 6.9603, aliases: ['koeln', 'köln', 'cologne'] },
-  { name: 'Stuttgart', lat: 48.7758, lng: 9.1829, aliases: ['stuttgart'] },
-  { name: 'Wien', lat: 48.2082, lng: 16.3738, aliases: ['wien', 'vienna'] },
-  { name: 'Salzburg', lat: 47.8095, lng: 13.0550, aliases: ['salzburg'] },
-  { name: 'Innsbruck', lat: 47.2692, lng: 11.4041, aliases: ['innsbruck'] },
-  { name: 'Zuerich', lat: 47.3769, lng: 8.5417, aliases: ['zuerich', 'zurich', 'zürich'] },
-  { name: 'Genf', lat: 46.2044, lng: 6.1432, aliases: ['genf', 'geneva'] },
-  { name: 'Mailand', lat: 45.4642, lng: 9.1900, aliases: ['mailand', 'milan', 'milano'] },
-  { name: 'Turin', lat: 45.0703, lng: 7.6869, aliases: ['turin', 'torino'] },
-  { name: 'Bologna', lat: 44.4949, lng: 11.3426, aliases: ['bologna'] },
-  { name: 'Florenz', lat: 43.7696, lng: 11.2558, aliases: ['florenz', 'florence', 'firenze'] },
-  { name: 'Rom', lat: 41.9028, lng: 12.4964, aliases: ['rom', 'rome', 'roma'] },
-  { name: 'Neapel', lat: 40.8518, lng: 14.2681, aliases: ['neapel', 'naples', 'napoli'] },
-  { name: "Sant'Agata di Esaro", lat: 39.8627, lng: 15.9827, aliases: ["sant'agata di esaro", 'santagata di esaro'] },
-  { name: 'Paris', lat: 48.8566, lng: 2.3522, aliases: ['paris'] },
-  { name: 'Lyon', lat: 45.7640, lng: 4.8357, aliases: ['lyon'] },
-  { name: 'Marseille', lat: 43.2965, lng: 5.3698, aliases: ['marseille'] },
-  { name: 'Nizza', lat: 43.7102, lng: 7.2620, aliases: ['nizza', 'nice'] },
-  { name: 'Barcelona', lat: 41.3874, lng: 2.1686, aliases: ['barcelona'] },
-  { name: 'Madrid', lat: 40.4168, lng: -3.7038, aliases: ['madrid'] },
-  { name: 'Valencia', lat: 39.4699, lng: -0.3763, aliases: ['valencia'] },
-  { name: 'Lissabon', lat: 38.7223, lng: -9.1393, aliases: ['lissabon', 'lisbon'] },
-  { name: 'Porto', lat: 41.1579, lng: -8.6291, aliases: ['porto'] },
-  { name: 'Amsterdam', lat: 52.3676, lng: 4.9041, aliases: ['amsterdam'] },
-  { name: 'Bruessel', lat: 50.8503, lng: 4.3517, aliases: ['bruessel', 'brüssel', 'brussels'] },
-  { name: 'Luxemburg', lat: 49.6116, lng: 6.1319, aliases: ['luxemburg', 'luxembourg'] },
-  { name: 'Prag', lat: 50.0755, lng: 14.4378, aliases: ['prag', 'prague'] },
-  { name: 'Warschau', lat: 52.2297, lng: 21.0122, aliases: ['warschau', 'warsaw'] },
-  { name: 'Krakau', lat: 50.0647, lng: 19.9450, aliases: ['krakau', 'krakow'] },
-  { name: 'Budapest', lat: 47.4979, lng: 19.0402, aliases: ['budapest'] },
-  { name: 'Ljubljana', lat: 46.0569, lng: 14.5058, aliases: ['ljubljana'] },
-  { name: 'Zagreb', lat: 45.8150, lng: 15.9819, aliases: ['zagreb'] },
-  { name: 'Split', lat: 43.5081, lng: 16.4402, aliases: ['split'] },
-  { name: 'Dubrovnik', lat: 42.6507, lng: 18.0944, aliases: ['dubrovnik'] },
-  { name: 'Kopenhagen', lat: 55.6761, lng: 12.5683, aliases: ['kopenhagen', 'copenhagen'] }
-];
 
 const APP_STATE = {
   trip: {
@@ -72,8 +29,7 @@ const APP_STATE = {
       geometry: [],
       distanceKm: 0,
       durationMinutes: 0,
-      boundingBox: null,
-      source: null
+      boundingBox: null
     },
     legs: [],
     pois: {
@@ -109,6 +65,7 @@ const APP_STATE = {
     lastRouteBuiltAt: null
   }
 };
+
 
 let map;
 
@@ -158,97 +115,9 @@ function interpolatePoint(a, b, ratio) {
   ];
 }
 
-function normalizeLocationQuery(value) {
-  return String(value || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9, .'-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function parseCoordinateQuery(query) {
-  const match = String(query).trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
-  if (!match) return null;
-
-  const lat = parseFloat(match[1]);
-  const lng = parseFloat(match[2]);
-  if (Number.isNaN(lat) || Number.isNaN(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
-    return null;
-  }
-
-  return {
-    name: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
-    lat,
-    lng,
-    source: 'coordinates'
-  };
-}
-
-function findLocalLocation(query) {
-  const normalized = normalizeLocationQuery(query);
-  if (!normalized) return null;
-
-  const exactMatch = LOCAL_LOCATION_INDEX.find(entry =>
-    entry.aliases.some(alias => alias === normalized)
-  );
-  if (exactMatch) {
-    return { name: exactMatch.name, lat: exactMatch.lat, lng: exactMatch.lng, source: 'local' };
-  }
-
-  const partialMatch = LOCAL_LOCATION_INDEX.find(entry =>
-    entry.aliases.some(alias => normalized.includes(alias) || alias.includes(normalized))
-  );
-  if (partialMatch) {
-    return { name: partialMatch.name, lat: partialMatch.lat, lng: partialMatch.lng, source: 'local' };
-  }
-
-  return null;
-}
-
-async function fetchJsonWithTimeout(url, timeoutMs = 6000, options = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function buildFallbackRoute(start, destination) {
-  const directKm = haversineKm([start.lat, start.lng], [destination.lat, destination.lng]);
-  const estimatedDistanceKm = Math.max(1, Math.round(directKm * 1.18));
-  const estimatedDurationMinutes = Math.max(20, Math.round((estimatedDistanceKm / DEFAULTS.fallbackAvgSpeedKmh) * 60));
-  const pointCount = Math.max(12, Math.min(36, Math.round(estimatedDistanceKm / 35)));
-  const geometry = [];
-
-  for (let i = 0; i <= pointCount; i++) {
-    const ratio = i / pointCount;
-    const curve = Math.sin(Math.PI * ratio) * 0.12;
-    geometry.push([
-      start.lat + ((destination.lat - start.lat) * ratio) + ((destination.lng - start.lng) * curve * 0.15),
-      start.lng + ((destination.lng - start.lng) * ratio) - ((destination.lat - start.lat) * curve * 0.15)
-    ]);
-  }
-
-  return {
-    geometry: { coordinates: geometry.map(([lat, lng]) => [lng, lat]) },
-    distance: estimatedDistanceKm * 1000,
-    duration: estimatedDurationMinutes * 60,
-    source: 'fallback'
-  };
-}
-
 function setLoadingState(isLoading, message = 'Route wird berechnet ...') {
   APP_STATE.ui.isLoading = isLoading;
-  if (isLoading) {
-    $('routeSummaryBadge').textContent = 'Live-Berechnung ...';
-  } else {
-    updateRouteBadge();
-  }
+  $('routeSummaryBadge').textContent = isLoading ? 'Live-Berechnung ...' : 'Aktuell';
   $('calculateBtn').disabled = isLoading;
   $('calculateBtn').innerHTML = isLoading
     ? `<i class="fas fa-spinner fa-spin"></i> ${message}`
@@ -330,63 +199,42 @@ function clearRouteOverlays() {
 }
 
 async function geocodeLocation(query) {
-  const coordinateMatch = parseCoordinateQuery(query);
-  if (coordinateMatch) {
-    return coordinateMatch;
-  }
-
-  const localMatch = findLocalLocation(query);
-  if (localMatch) {
-    return localMatch;
-  }
-
   const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`;
+  const response = await fetch(url, {
+    headers: { Accept: 'application/json' }
+  });
 
-  try {
-    const response = await fetchJsonWithTimeout(url, 5000, {
-      headers: { Accept: 'application/json' }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Geocoding fehlgeschlagen (${response.status})`);
-    }
-
-    const results = await response.json();
-    if (!results.length) {
-      throw new Error(`Ort nicht gefunden: ${query}`);
-    }
-
-    const result = results[0];
-    return {
-      name: result.display_name,
-      lat: parseFloat(result.lat),
-      lng: parseFloat(result.lon),
-      source: 'remote'
-    };
-  } catch (error) {
-    throw new Error(`Ort nicht gefunden oder Geocoding-Dienst nicht erreichbar: ${query}`);
+  if (!response.ok) {
+    throw new Error(`Geocoding fehlgeschlagen (${response.status})`);
   }
+
+  const results = await response.json();
+  if (!results.length) {
+    throw new Error(`Ort nicht gefunden: ${query}`);
+  }
+
+  const result = results[0];
+  return {
+    name: result.display_name,
+    lat: parseFloat(result.lat),
+    lng: parseFloat(result.lon)
+  };
 }
 
 async function fetchRoute(start, destination) {
   const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson&steps=false`;
+  const response = await fetch(url);
 
-  try {
-    const response = await fetchJsonWithTimeout(url, 7000);
-
-    if (!response.ok) {
-      throw new Error(`Routing fehlgeschlagen (${response.status})`);
-    }
-
-    const data = await response.json();
-    if (!data.routes || !data.routes.length) {
-      throw new Error('Keine Route gefunden');
-    }
-
-    return { ...data.routes[0], source: 'osrm' };
-  } catch (error) {
-    return buildFallbackRoute(start, destination);
+  if (!response.ok) {
+    throw new Error(`Routing fehlgeschlagen (${response.status})`);
   }
+
+  const data = await response.json();
+  if (!data.routes || !data.routes.length) {
+    throw new Error('Keine Route gefunden');
+  }
+
+  return data.routes[0];
 }
 
 function computeBoundingBox(coords) {
@@ -759,28 +607,14 @@ function updateInfoBanner() {
   $('bannerText').innerHTML = `<i class="fas fa-check-circle"></i> ${total} Stops ausgewaehlt: ${parts.join(', ')} | Gesamt ${formatCurrency(APP_STATE.trip.budget.total)}`;
 }
 
-function updateRouteBadge() {
-  if (!APP_STATE.trip.route.distanceKm) {
-    $('routeSummaryBadge').textContent = 'Bereit';
-    return;
-  }
-
-  $('routeSummaryBadge').textContent = APP_STATE.trip.route.source === 'fallback'
-    ? 'Fallback-Route'
-    : 'Live-Route';
-}
-
 function updateFooter() {
   const { inputs, route, legs } = APP_STATE.trip;
   if (!route.distanceKm) {
     $('footerRouteText').textContent = 'Reiseplaner v3.0 | Bereit fuer beliebige Autoreisen';
-    updateRouteBadge();
     return;
   }
 
-  const sourceLabel = route.source === 'fallback' ? 'geschaetzte Fallback-Route' : 'Live-Route';
-  $('footerRouteText').textContent = `Reiseplaner v3.0 | ${inputs.start} → ${inputs.destination} | ${formatDistance(route.distanceKm)} | ${formatDuration(route.durationMinutes)} | ${legs.length} Etappe(n) | ${sourceLabel}`;
-  updateRouteBadge();
+  $('footerRouteText').textContent = `Reiseplaner v3.0 | ${inputs.start} → ${inputs.destination} | ${formatDistance(route.distanceKm)} | ${formatDuration(route.durationMinutes)} | ${legs.length} Etappe(n)`;
 }
 
 function darkModeToggle() {
@@ -855,8 +689,7 @@ async function rebuildTrip() {
       geometry,
       distanceKm,
       durationMinutes,
-      boundingBox: computeBoundingBox(geometry),
-      source: routeData.source || 'osrm'
+      boundingBox: computeBoundingBox(geometry)
     };
 
     APP_STATE.trip.legs = buildLegsFromGeometry(geometry, distanceKm, durationMinutes, APP_STATE.trip.inputs);
@@ -873,7 +706,7 @@ async function rebuildTrip() {
     saveTripToLocalStorage();
   } catch (error) {
     console.error(error);
-    APP_STATE.trip.route = { start: null, destination: null, geometry: [], distanceKm: 0, durationMinutes: 0, boundingBox: null, source: null };
+    APP_STATE.trip.route = { start: null, destination: null, geometry: [], distanceKm: 0, durationMinutes: 0, boundingBox: null };
     APP_STATE.trip.legs = [];
     APP_STATE.trip.pois = { hotels: [], tankstellen: [], pausen: [] };
     resetSelectionsForNewRoute();
