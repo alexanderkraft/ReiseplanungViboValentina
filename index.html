@@ -176,6 +176,7 @@
   // Defaults – js/config.js ueberschreibt diese Werte falls vorhanden
   window.GEOAPIFY_API_KEY = window.GEOAPIFY_API_KEY || '';
 </script>
+<script src="js/version.js" onerror="console.info('version.js nicht gefunden – lokale Entwicklung')"></script>
 <script src="js/config.js" onerror="console.info('js/config.js nicht gefunden – nutze Defaults. Siehe js/config.template.js')"></script>
 <script type="module" src="js/app.js" onerror="document.getElementById('map').innerHTML='<p style=\'padding:2rem;color:#e44\'>Fehler beim Laden der App. Bitte ueber einen Webserver oeffnen (nicht file://).</p>'"></script>
 <noscript><p style="padding:2rem;text-align:center">JavaScript muss aktiviert sein, um den Reiseplaner zu nutzen.</p></noscript>
