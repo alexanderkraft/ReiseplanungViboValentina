@@ -83,23 +83,6 @@ header h1 {
   background: #059669;
 }
 
-.traffic-toggle {
-  background: #6b7280;
-}
-
-.traffic-toggle:hover {
-  background: #4b5563;
-}
-
-.traffic-toggle.active {
-  background: #dc2626;
-  box-shadow: 0 0 8px rgba(220, 38, 38, 0.5);
-}
-
-.traffic-toggle.active:hover {
-  background: #b91c1c;
-}
-
 .container {
   max-width: 1200px;
   margin: 0 auto;
@@ -532,8 +515,7 @@ footer {
   }
 
   .theme-toggle,
-  .sidebar-toggle,
-  .traffic-toggle {
+  .sidebar-toggle {
     padding: 0.4rem 0.7rem;
     font-size: 0.8rem;
   }
