@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POI",
+  "type": "object",
+  "required": ["id", "category", "name"],
+  "properties": {
+    "id": { "type": "string" },
+    "category": { "type": "string" },
+    "name": { "type": "string" },
+    "lat": { "type": ["number", "null"] },
+    "lng": { "type": ["number", "null"] }
+  }
+}
