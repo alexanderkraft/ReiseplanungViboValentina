@@ -1,148 +1,172 @@
-// ===== ROUTE DATA =====
-const ROUTE = [
-  { name: 'Frankfurt', lat: 50.1109, lng: 8.6821, icon: '🏁' },
-  { name: 'Innsbruck', lat: 47.2692, lng: 11.4041, icon: '🏔' },
-  { name: 'Bologna', lat: 44.4949, lng: 11.3426, icon: '🍝' },
-  { name: "Sant'Agata di Esaro", lat: 39.035, lng: 16.345, icon: '🏖' }
-];
-
-const ETAPPEN = [
-  { from: 'Frankfurt', to: 'Innsbruck', km: 525, hours: 6, description: 'Durch Sueddeutschland ueber die A7/A8 nach Tirol', maut: 30 },
-  { from: 'Innsbruck', to: 'Bologna', km: 650, hours: 7, description: 'Ueber den Brennerpass durch Suedtirol nach Emilia-Romagna', maut: 80 },
-  { from: 'Bologna', to: "Sant'Agata di Esaro", km: 775, hours: 8, description: 'Die Adriakueste entlang bis nach Kalabrien', maut: 70 }
-];
-
-const BUDGET_DEFAULTS = {
+const DEFAULTS = {
+  start: 'Frankfurt am Main',
+  destination: "Sant'Agata di Esaro",
+  date: '2026-08-13',
+  persons: 2,
+  maxKmPerDay: 650,
   fuelPriceLiter: 1.65,
   fuelConsumption: 7,
   hotelPerNight: 175,
-  nights: 2,
-  persons: 2
+  tollPer100Km: 9
 };
 
-// ===== INTERACTIVE STOP DATA =====
-const HOTELS = [
-  { name: 'Pension Rose', price: 70, lat: 47.2620, lng: 11.3950, etappe: 0, rating: '3.8' },
-  { name: 'Hotel Brenner', price: 95, lat: 47.2710, lng: 11.4100, etappe: 0, rating: '4.2' },
-  { name: 'Luxury Alpine Inn', price: 150, lat: 47.2750, lng: 11.3900, etappe: 0, rating: '4.7' },
-  { name: 'Albergo Centro', price: 65, lat: 44.4980, lng: 11.3400, etappe: 1, rating: '3.5' },
-  { name: 'Hotel Bologna Star', price: 110, lat: 44.4920, lng: 11.3500, etappe: 1, rating: '4.3' },
-  { name: 'Grand Hotel Majestic', price: 180, lat: 44.4900, lng: 11.3380, etappe: 1, rating: '4.8' }
-];
+const APP_STATE = {
+  trip: {
+    inputs: {
+      start: DEFAULTS.start,
+      destination: DEFAULTS.destination,
+      date: DEFAULTS.date,
+      persons: DEFAULTS.persons,
+      maxKmPerDay: DEFAULTS.maxKmPerDay,
+      fuelPrice: DEFAULTS.fuelPriceLiter,
+      fuelConsumption: DEFAULTS.fuelConsumption,
+      hotelPrice: DEFAULTS.hotelPerNight,
+      routeMode: 'balanced'
+    },
+    route: {
+      start: null,
+      destination: null,
+      geometry: [],
+      distanceKm: 0,
+      durationMinutes: 0,
+      boundingBox: null
+    },
+    legs: [],
+    pois: {
+      hotels: [],
+      tankstellen: [],
+      pausen: []
+    },
+    selectedItems: {
+      hotels: [],
+      tankstellen: [],
+      pausen: []
+    },
+    budget: {
+      toll: 0,
+      fuel: 0,
+      hotels: 0,
+      extras: 0,
+      total: 0,
+      perPerson: 0
+    }
+  },
+  ui: {
+    activeTab: 'hotels',
+    routeLayer: null,
+    markerLayer: null,
+    poiLayers: {
+      hotels: null,
+      tankstellen: null,
+      pausen: null
+    },
+    routeMarkers: [],
+    isLoading: false,
+    lastRouteBuiltAt: null
+  }
+};
 
-const TANKSTELLEN = [
-  { name: 'Aral Frankfurt-Sued', priceLiter: 1.89, lat: 50.0900, lng: 8.6700, etappe: 0 },
-  { name: 'Shell Muenchen', priceLiter: 1.82, lat: 48.1351, lng: 11.5820, etappe: 0 },
-  { name: 'OMV Innsbruck', priceLiter: 1.74, lat: 47.2600, lng: 11.4200, etappe: 0 },
-  { name: 'Agip Brennero', priceLiter: 1.79, lat: 46.9900, lng: 11.5100, etappe: 1 },
-  { name: 'ENI Verona', priceLiter: 1.76, lat: 45.4384, lng: 10.9916, etappe: 1 },
-  { name: 'IP Bologna Nord', priceLiter: 1.72, lat: 44.5200, lng: 11.3500, etappe: 1 },
-  { name: 'Esso Firenze', priceLiter: 1.81, lat: 43.7696, lng: 11.2558, etappe: 2 },
-  { name: 'TotalEnergies Napoli', priceLiter: 1.69, lat: 40.8518, lng: 14.2681, etappe: 2 }
-];
-
-const PAUSEN = [
-  { name: 'Brennerpass Aussicht', duration: 15, lat: 47.0000, lng: 11.5100, etappe: 1, description: 'Panoramablick auf die Alpen' },
-  { name: 'Verona Arena', duration: 120, lat: 45.4390, lng: 10.9945, etappe: 1, description: 'Roemisches Amphitheater besichtigen' },
-  { name: 'Raststatte Gardasee', duration: 30, lat: 45.6500, lng: 10.6300, etappe: 1, description: 'Kaffeepause mit Seeblick' },
-  { name: 'Firenze Piazzale', duration: 90, lat: 43.7630, lng: 11.2650, etappe: 2, description: 'Blick ueber Florenz' },
-  { name: 'Autogrill Salerno', duration: 20, lat: 40.6824, lng: 14.7681, etappe: 2, description: 'Schnelle Pause an der Autobahn' },
-  { name: 'Spiaggia Maratea', duration: 60, lat: 39.9900, lng: 15.7200, etappe: 2, description: 'Strand-Stopp an der Kueste' }
-];
-
-const ROUTE_COLORS = ['#3b82f6', '#10b981', '#f59e0b'];
-
-// ===== GLOBALS =====
 let map;
-let markers = [];
-let routingControl = null;
-let hotelLayer, tankLayer, pauseLayer;
-let activeTab = 'hotels';
 
-let selectedItems = {
-  hotels: [],
-  tankstellen: [],
-  pausen: []
-};
+function $(id) {
+  return document.getElementById(id);
+}
 
-// ===== MAP INITIALIZATION =====
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function formatCurrency(value) {
+  return `EUR ${Math.round(value)}`;
+}
+
+function formatDistance(value) {
+  return `${Math.round(value)} km`;
+}
+
+function formatDuration(minutes) {
+  const safeMinutes = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(safeMinutes / 60);
+  const mins = safeMinutes % 60;
+  return `${hours}h ${mins}min`;
+}
+
+function haversineKm(a, b) {
+  const toRad = deg => (deg * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(b[0] - a[0]);
+  const dLng = toRad(b[1] - a[1]);
+  const lat1 = toRad(a[0]);
+  const lat2 = toRad(b[0]);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+function interpolatePoint(a, b, ratio) {
+  return [
+    a[0] + (b[0] - a[0]) * ratio,
+    a[1] + (b[1] - a[1]) * ratio
+  ];
+}
+
+function setLoadingState(isLoading, message = 'Route wird berechnet ...') {
+  APP_STATE.ui.isLoading = isLoading;
+  $('routeSummaryBadge').textContent = isLoading ? 'Live-Berechnung ...' : 'Aktuell';
+  $('calculateBtn').disabled = isLoading;
+  $('calculateBtn').innerHTML = isLoading
+    ? `<i class="fas fa-spinner fa-spin"></i> ${message}`
+    : '<i class="fas fa-calculator"></i> Route berechnen';
+}
+
+function readInputsIntoState() {
+  APP_STATE.trip.inputs = {
+    ...APP_STATE.trip.inputs,
+    start: $('startInput').value.trim() || DEFAULTS.start,
+    destination: $('zielInput').value.trim() || DEFAULTS.destination,
+    date: $('dateInput').value || DEFAULTS.date,
+    persons: Math.max(1, parseInt($('personenInput').value, 10) || DEFAULTS.persons),
+    maxKmPerDay: Math.max(150, parseInt($('maxKmPerDayInput').value, 10) || DEFAULTS.maxKmPerDay),
+    fuelPrice: parseFloat($('fuelPrice').value) || DEFAULTS.fuelPriceLiter,
+    fuelConsumption: parseFloat($('fuelConsumption').value) || DEFAULTS.fuelConsumption,
+    hotelPrice: parseFloat($('hotelPrice').value) || DEFAULTS.hotelPerNight,
+    routeMode: APP_STATE.trip.inputs.routeMode || 'balanced'
+  };
+}
+
+function writeStateToInputs() {
+  const { inputs } = APP_STATE.trip;
+  $('startInput').value = inputs.start || DEFAULTS.start;
+  $('zielInput').value = inputs.destination || DEFAULTS.destination;
+  $('dateInput').value = inputs.date || DEFAULTS.date;
+  $('personenInput').value = inputs.persons || DEFAULTS.persons;
+  $('maxKmPerDayInput').value = inputs.maxKmPerDay || DEFAULTS.maxKmPerDay;
+  $('fuelPrice').value = inputs.fuelPrice || DEFAULTS.fuelPriceLiter;
+  $('fuelConsumption').value = inputs.fuelConsumption || DEFAULTS.fuelConsumption;
+  $('hotelPrice').value = inputs.hotelPrice || DEFAULTS.hotelPerNight;
+  document.querySelectorAll('.route-opt').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === inputs.routeMode);
+  });
+}
+
 function initMap() {
-  map = L.map('map').setView([45.5, 12.0], 6);
+  map = L.map('map').setView([48.2, 11.7], 5);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     maxZoom: 18
   }).addTo(map);
 
-  // Layer groups for interactive markers
-  hotelLayer = L.layerGroup().addTo(map);
-  tankLayer = L.layerGroup().addTo(map);
-  pauseLayer = L.layerGroup().addTo(map);
-
-  // Add route waypoint markers
-  ROUTE.forEach((point) => {
-    const marker = L.marker([point.lat, point.lng]).addTo(map);
-    marker.bindPopup(`<b>${point.icon} ${point.name}</b>`);
-    markers.push(marker);
-  });
-
-  // OSRM Routing
-  initRouting();
+  APP_STATE.ui.markerLayer = L.layerGroup().addTo(map);
+  APP_STATE.ui.poiLayers.hotels = L.layerGroup().addTo(map);
+  APP_STATE.ui.poiLayers.tankstellen = L.layerGroup().addTo(map);
+  APP_STATE.ui.poiLayers.pausen = L.layerGroup().addTo(map);
 }
 
-function initRouting() {
-  const waypoints = ROUTE.map(p => L.latLng(p.lat, p.lng));
-
-  try {
-    routingControl = L.Routing.control({
-      waypoints: waypoints,
-      router: L.Routing.osrmv1({
-        serviceUrl: 'https://router.project-osrm.org/route/v1',
-        profile: 'car'
-      }),
-      lineOptions: {
-        styles: [{ color: '#3b82f6', weight: 5, opacity: 0.8 }],
-        addWaypoints: false
-      },
-      show: false,
-      addWaypoints: false,
-      draggableWaypoints: false,
-      fitSelectedRoutes: true,
-      createMarker: function() { return null; } // We use our own markers
-    }).addTo(map);
-
-    routingControl.on('routesfound', function(e) {
-      const route = e.routes[0];
-      const totalKm = Math.round(route.summary.totalDistance / 1000);
-      const totalMin = Math.round(route.summary.totalTime / 60);
-      const hours = Math.floor(totalMin / 60);
-      const mins = totalMin % 60;
-      document.querySelector('footer p').textContent =
-        `Reiseplaner v2.0 | ${totalKm} km | ${hours}h ${mins}min | OSRM Route`;
-    });
-
-    routingControl.on('routingerror', function() {
-      drawFallbackPolylines();
-    });
-  } catch (e) {
-    drawFallbackPolylines();
-  }
-}
-
-function drawFallbackPolylines() {
-  for (let i = 0; i < ROUTE.length - 1; i++) {
-    const start = ROUTE[i];
-    const end = ROUTE[i + 1];
-    L.polyline(
-      [[start.lat, start.lng], [end.lat, end.lng]],
-      { color: ROUTE_COLORS[i], weight: 4, opacity: 0.8, dashArray: '10, 8' }
-    ).addTo(map);
-  }
-  const bounds = L.latLngBounds(ROUTE.map(p => [p.lat, p.lng]));
-  map.fitBounds(bounds, { padding: [30, 30] });
-}
-
-// ===== CUSTOM MARKERS =====
 function createIcon(type, emoji) {
   const classMap = { hotels: 'marker-hotel', tankstellen: 'marker-tank', pausen: 'marker-pause' };
   return L.divIcon({
@@ -154,81 +178,306 @@ function createIcon(type, emoji) {
   });
 }
 
-// ===== SIDEBAR =====
-function toggleSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  const overlay = document.getElementById('sidebarOverlay');
-  const isActive = sidebar.classList.contains('active');
-  sidebar.classList.toggle('active');
-  overlay.classList.toggle('active');
-  if (!isActive) {
-    renderOverlayItems(activeTab);
-  }
+function createRouteMarkerIcon(label) {
+  return L.divIcon({
+    className: 'route-pin-wrapper',
+    html: `<div class="route-pin">${escapeHtml(label)}</div>`,
+    iconSize: [38, 38],
+    iconAnchor: [19, 19]
+  });
 }
 
-function switchTab(type) {
-  activeTab = type;
-  document.querySelectorAll('.overlay-tab').forEach(tab => {
-    tab.classList.toggle('active', tab.dataset.tab === type);
+function clearRouteOverlays() {
+  if (APP_STATE.ui.routeLayer) {
+    map.removeLayer(APP_STATE.ui.routeLayer);
+    APP_STATE.ui.routeLayer = null;
+  }
+  APP_STATE.ui.markerLayer.clearLayers();
+  Object.values(APP_STATE.ui.poiLayers).forEach(layer => layer.clearLayers());
+  APP_STATE.ui.routeMarkers = [];
+}
+
+async function geocodeLocation(query) {
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`;
+  const response = await fetch(url, {
+    headers: { Accept: 'application/json' }
   });
-  renderOverlayItems(type);
+
+  if (!response.ok) {
+    throw new Error(`Geocoding fehlgeschlagen (${response.status})`);
+  }
+
+  const results = await response.json();
+  if (!results.length) {
+    throw new Error(`Ort nicht gefunden: ${query}`);
+  }
+
+  const result = results[0];
+  return {
+    name: result.display_name,
+    lat: parseFloat(result.lat),
+    lng: parseFloat(result.lon)
+  };
+}
+
+async function fetchRoute(start, destination) {
+  const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson&steps=false`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Routing fehlgeschlagen (${response.status})`);
+  }
+
+  const data = await response.json();
+  if (!data.routes || !data.routes.length) {
+    throw new Error('Keine Route gefunden');
+  }
+
+  return data.routes[0];
+}
+
+function computeBoundingBox(coords) {
+  const bounds = L.latLngBounds(coords.map(coord => [coord[0], coord[1]]));
+  return bounds;
+}
+
+function buildLegsFromGeometry(geometry, totalDistanceKm, totalDurationMinutes, inputs) {
+  if (geometry.length < 2) {
+    return [];
+  }
+
+  const targetKm = inputs.routeMode === 'short-day'
+    ? Math.max(150, inputs.maxKmPerDay - 100)
+    : inputs.maxKmPerDay;
+
+  const segmentDistances = [];
+  let accumulated = 0;
+
+  for (let i = 0; i < geometry.length - 1; i++) {
+    const segmentKm = haversineKm(geometry[i], geometry[i + 1]);
+    segmentDistances.push(segmentKm);
+    accumulated += segmentKm;
+  }
+
+  const totalKmApprox = accumulated || totalDistanceKm;
+  const stopPoints = [geometry[0]];
+
+  let runningKm = 0;
+  let nextBreakAt = targetKm;
+  for (let i = 0; i < segmentDistances.length; i++) {
+    const start = geometry[i];
+    const end = geometry[i + 1];
+    const segmentKm = segmentDistances[i];
+
+    while (runningKm + segmentKm >= nextBreakAt && nextBreakAt < totalKmApprox - 20) {
+      const remainingToBreak = nextBreakAt - runningKm;
+      const ratio = segmentKm === 0 ? 0 : remainingToBreak / segmentKm;
+      stopPoints.push(interpolatePoint(start, end, Math.min(1, Math.max(0, ratio))));
+      nextBreakAt += targetKm;
+    }
+
+    runningKm += segmentKm;
+  }
+
+  stopPoints.push(geometry[geometry.length - 1]);
+
+  const hotelNights = Math.max(0, stopPoints.length - 2);
+  $('hotelNightCount').textContent = String(hotelNights);
+
+  const legs = [];
+  for (let i = 0; i < stopPoints.length - 1; i++) {
+    const fromCoord = stopPoints[i];
+    const toCoord = stopPoints[i + 1];
+    const isFirst = i === 0;
+    const isLast = i === stopPoints.length - 2;
+
+    const fromLabel = isFirst ? inputs.start : `Etappenstopp ${i}`;
+    const toLabel = isLast ? inputs.destination : `Etappenstopp ${i + 1}`;
+    const km = totalDistanceKm * (haversineKm(fromCoord, toCoord) / totalKmApprox || 0);
+    const ratio = totalKmApprox === 0 ? 0 : haversineKm(fromCoord, toCoord) / totalKmApprox;
+    const minutes = Math.max(20, totalDurationMinutes * ratio);
+
+    legs.push({
+      id: `leg-${i + 1}`,
+      index: i,
+      fromLabel,
+      toLabel,
+      km: Math.max(1, Math.round(km)),
+      minutes: Math.round(minutes),
+      fromCoord,
+      toCoord,
+      midpoint: interpolatePoint(fromCoord, toCoord, 0.5),
+      tollEstimate: Math.round((km / 100) * DEFAULTS.tollPer100Km)
+    });
+  }
+
+  return legs;
+}
+
+function generateDynamicPois(legs) {
+  const hotels = [];
+  const tankstellen = [];
+  const pausen = [];
+
+  legs.forEach((leg, index) => {
+    if (index < legs.length - 1) {
+      hotels.push({
+        id: `hotel-${index + 1}`,
+        name: `Hotel-Vorschlag Etappe ${index + 1}`,
+        price: 95 + (index * 20),
+        rating: (4.0 + (index * 0.2)).toFixed(1),
+        lat: leg.toCoord[0] + 0.03,
+        lng: leg.toCoord[1] + 0.03,
+        etappe: index,
+        info: `${leg.toLabel} - kurzer Umweg fuer Uebernachtung`
+      });
+    }
+
+    tankstellen.push({
+      id: `tank-${index + 1}`,
+      name: `Tankstopp Etappe ${index + 1}`,
+      priceLiter: Math.max(1.55, 1.89 - (index * 0.04)),
+      lat: leg.midpoint[0] + 0.02,
+      lng: leg.midpoint[1] - 0.015,
+      etappe: index,
+      info: `${leg.fromLabel} - ${leg.toLabel}`
+    });
+
+    pausen.push({
+      id: `pause-${index + 1}`,
+      name: `Pause Etappe ${index + 1}`,
+      duration: 20 + (index * 15),
+      lat: leg.midpoint[0] - 0.018,
+      lng: leg.midpoint[1] + 0.02,
+      etappe: index,
+      description: `Empfohlene Pause nach etwa ${Math.round(leg.km / 2)} km`
+    });
+  });
+
+  return { hotels, tankstellen, pausen };
+}
+
+function resetSelectionsForNewRoute() {
+  APP_STATE.trip.selectedItems = {
+    hotels: [],
+    tankstellen: [],
+    pausen: []
+  };
+}
+
+function renderRoute() {
+  clearRouteOverlays();
+
+  const coords = APP_STATE.trip.route.geometry;
+  if (!coords.length) {
+    return;
+  }
+
+  APP_STATE.ui.routeLayer = L.polyline(coords, {
+    color: '#3b82f6',
+    weight: 5,
+    opacity: 0.85
+  }).addTo(map);
+
+  const points = [];
+  if (APP_STATE.trip.route.start) {
+    points.push({ label: 'S', name: APP_STATE.trip.inputs.start, coord: [APP_STATE.trip.route.start.lat, APP_STATE.trip.route.start.lng] });
+  }
+  APP_STATE.trip.legs.forEach((leg, index) => {
+    if (index < APP_STATE.trip.legs.length - 1) {
+      points.push({ label: String(index + 1), name: leg.toLabel, coord: leg.toCoord });
+    }
+  });
+  if (APP_STATE.trip.route.destination) {
+    points.push({ label: 'Z', name: APP_STATE.trip.inputs.destination, coord: [APP_STATE.trip.route.destination.lat, APP_STATE.trip.route.destination.lng] });
+  }
+
+  points.forEach(point => {
+    const marker = L.marker(point.coord, { icon: createRouteMarkerIcon(point.label) }).addTo(APP_STATE.ui.markerLayer);
+    marker.bindPopup(`<b>${escapeHtml(point.name)}</b>`);
+    APP_STATE.ui.routeMarkers.push(marker);
+  });
+
+  const bounds = computeBoundingBox(coords);
+  map.fitBounds(bounds, { padding: [30, 30] });
+}
+
+function renderEtappen() {
+  const grid = $('etappenGrid');
+  grid.innerHTML = '';
+
+  if (!APP_STATE.trip.legs.length) {
+    grid.innerHTML = '<div class="empty-state">Noch keine Etappen vorhanden. Bitte eine Route berechnen.</div>';
+    return;
+  }
+
+  APP_STATE.trip.legs.forEach((leg, index) => {
+    const card = document.createElement('div');
+    card.className = 'etappe-card';
+    card.onclick = () => zoomToLeg(index);
+    card.innerHTML = `
+      <h3><i class="fas fa-route"></i> Etappe ${index + 1}</h3>
+      <div class="detail"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(leg.fromLabel)} - ${escapeHtml(leg.toLabel)}</div>
+      <div class="detail"><i class="fas fa-road"></i> ${leg.km} km</div>
+      <div class="detail"><i class="fas fa-clock"></i> ~${formatDuration(leg.minutes)}</div>
+      <div class="detail"><i class="fas fa-coins"></i> Maut-Schaetzung: ${formatCurrency(leg.tollEstimate)}</div>
+      <div class="detail" style="margin-top:0.5rem;font-style:italic;opacity:0.7">Auto-generiert mit max. ${APP_STATE.trip.inputs.maxKmPerDay} km/Tag</div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function zoomToLeg(index) {
+  const leg = APP_STATE.trip.legs[index];
+  if (!leg) return;
+  const bounds = L.latLngBounds([leg.fromCoord, leg.toCoord]);
+  map.fitBounds(bounds, { padding: [60, 60] });
 }
 
 function renderOverlayItems(type) {
-  const container = document.getElementById('overlayContent');
-  let data, emoji;
+  const container = $('overlayContent');
+  const data = APP_STATE.trip.pois[type] || [];
 
-  switch (type) {
-    case 'hotels':
-      data = HOTELS;
-      emoji = '🏨';
-      break;
-    case 'tankstellen':
-      data = TANKSTELLEN;
-      emoji = '⛽';
-      break;
-    case 'pausen':
-      data = PAUSEN;
-      emoji = '☕';
-      break;
+  if (!APP_STATE.trip.legs.length) {
+    container.innerHTML = '<div class="empty-state">Berechne zuerst eine Route, um Vorschlaege zu sehen.</div>';
+    return;
   }
 
-  // Group by etappe
-  const grouped = {};
-  data.forEach((item, idx) => {
-    if (!grouped[item.etappe]) grouped[item.etappe] = [];
-    grouped[item.etappe].push({ ...item, originalIndex: idx });
-  });
+  if (!data.length) {
+    container.innerHTML = '<div class="empty-state">Keine Vorschlaege fuer diese Route vorhanden.</div>';
+    return;
+  }
 
+  const emojiMap = { hotels: '🏨', tankstellen: '⛽', pausen: '☕' };
   let html = '';
-  Object.keys(grouped).sort().forEach(etappeIdx => {
-    const etappe = ETAPPEN[etappeIdx];
-    html += `<div class="overlay-etappe-label">${emoji} Etappe ${parseInt(etappeIdx) + 1}: ${etappe.from} - ${etappe.to}</div>`;
 
-    grouped[etappeIdx].forEach(item => {
-      const isSelected = selectedItems[type].includes(item.originalIndex);
-      let priceText, infoText;
+  APP_STATE.trip.legs.forEach((leg, legIndex) => {
+    const legItems = data.filter(item => item.etappe === legIndex);
+    if (!legItems.length) return;
 
-      switch (type) {
-        case 'hotels':
-          priceText = `EUR ${item.price}`;
-          infoText = `Bewertung: ${item.rating}/5`;
-          break;
-        case 'tankstellen':
-          priceText = `EUR ${item.priceLiter.toFixed(2)}/L`;
-          infoText = `Etappe ${parseInt(etappeIdx) + 1}`;
-          break;
-        case 'pausen':
-          priceText = `${item.duration} min`;
-          infoText = item.description;
-          break;
+    html += `<div class="overlay-etappe-label">${emojiMap[type]} Etappe ${legIndex + 1}: ${escapeHtml(leg.fromLabel)} - ${escapeHtml(leg.toLabel)}</div>`;
+
+    legItems.forEach(item => {
+      const isSelected = APP_STATE.trip.selectedItems[type].includes(item.id);
+      let priceText = '';
+      let infoText = '';
+
+      if (type === 'hotels') {
+        priceText = `${formatCurrency(item.price)}`;
+        infoText = `Bewertung: ${item.rating}/5`;
+      } else if (type === 'tankstellen') {
+        priceText = `EUR ${item.priceLiter.toFixed(2)}/L`;
+        infoText = item.info;
+      } else {
+        priceText = `${item.duration} min`;
+        infoText = item.description;
       }
 
       html += `
-        <div class="overlay-item ${isSelected ? 'selected' : ''}" onclick="toggleSelection('${type}', ${item.originalIndex})">
+        <div class="overlay-item ${isSelected ? 'selected' : ''}" data-type="${type}" data-id="${item.id}">
           <div class="overlay-item-left">
-            <div class="overlay-item-name">${isSelected ? '&#10003; ' : ''}${item.name}</div>
-            <div class="overlay-item-info">${infoText}</div>
+            <div class="overlay-item-name">${isSelected ? '&#10003; ' : ''}${escapeHtml(item.name)}</div>
+            <div class="overlay-item-info">${escapeHtml(infoText)}</div>
           </div>
           <div class="overlay-item-price">${priceText}</div>
         </div>
@@ -237,298 +486,406 @@ function renderOverlayItems(type) {
   });
 
   container.innerHTML = html;
+  container.querySelectorAll('.overlay-item').forEach(item => {
+    item.addEventListener('click', () => toggleSelection(item.dataset.type, item.dataset.id));
+  });
 }
 
-// ===== SELECTION LOGIC =====
-function toggleSelection(type, index) {
-  const arr = selectedItems[type];
-  const pos = arr.indexOf(index);
+function addMarkerForItem(type, itemId) {
+  const layer = APP_STATE.ui.poiLayers[type];
+  const item = (APP_STATE.trip.pois[type] || []).find(entry => entry.id === itemId);
+  if (!layer || !item) return;
 
-  if (pos > -1) {
-    arr.splice(pos, 1);
-    removeMarkerForItem(type, index);
-  } else {
-    arr.push(index);
-    addMarkerForItem(type, index);
-  }
+  const config = {
+    hotels: { emoji: '🏨', popup: `<b>🏨 ${escapeHtml(item.name)}</b><br>${formatCurrency(item.price)}/Nacht<br>Bewertung: ${item.rating}/5` },
+    tankstellen: { emoji: '⛽', popup: `<b>⛽ ${escapeHtml(item.name)}</b><br>EUR ${item.priceLiter.toFixed(2)}/Liter` },
+    pausen: { emoji: '☕', popup: `<b>☕ ${escapeHtml(item.name)}</b><br>${item.duration} min<br>${escapeHtml(item.description)}` }
+  }[type];
 
-  renderOverlayItems(activeTab);
-  calculateBudget();
-  updateInfoBanner();
-  saveToLocalStorage();
-}
-
-function addMarkerForItem(type, index) {
-  let item, layer, emoji, popupContent;
-
-  switch (type) {
-    case 'hotels':
-      item = HOTELS[index];
-      layer = hotelLayer;
-      emoji = '🏨';
-      popupContent = `<b>🏨 ${item.name}</b><br>EUR ${item.price}/Nacht<br>Bewertung: ${item.rating}/5`;
-      break;
-    case 'tankstellen':
-      item = TANKSTELLEN[index];
-      layer = tankLayer;
-      emoji = '⛽';
-      popupContent = `<b>⛽ ${item.name}</b><br>EUR ${item.priceLiter.toFixed(2)}/Liter`;
-      break;
-    case 'pausen':
-      item = PAUSEN[index];
-      layer = pauseLayer;
-      emoji = '☕';
-      popupContent = `<b>☕ ${item.name}</b><br>${item.duration} min<br>${item.description}`;
-      break;
-  }
-
-  const marker = L.marker([item.lat, item.lng], {
-    icon: createIcon(type, emoji)
-  }).addTo(layer);
-  marker.bindPopup(popupContent);
+  const marker = L.marker([item.lat, item.lng], { icon: createIcon(type, config.emoji) }).addTo(layer);
+  marker.bindPopup(config.popup);
   marker._itemType = type;
-  marker._itemIndex = index;
+  marker._itemId = itemId;
   marker.openPopup();
 }
 
-function removeMarkerForItem(type, index) {
-  const layerMap = { hotels: hotelLayer, tankstellen: tankLayer, pausen: pauseLayer };
-  const layer = layerMap[type];
-  layer.eachLayer(m => {
-    if (m._itemType === type && m._itemIndex === index) {
-      layer.removeLayer(m);
+function removeMarkerForItem(type, itemId) {
+  const layer = APP_STATE.ui.poiLayers[type];
+  if (!layer) return;
+  layer.eachLayer(marker => {
+    if (marker._itemType === type && marker._itemId === itemId) {
+      layer.removeLayer(marker);
     }
   });
 }
 
-// ===== BUDGET =====
-function calculateBudget() {
-  const fuelPrice = parseFloat(document.getElementById('fuelPrice').value) || BUDGET_DEFAULTS.fuelPriceLiter;
-  const consumption = parseFloat(document.getElementById('fuelConsumption').value) || BUDGET_DEFAULTS.fuelConsumption;
-  const hotelPrice = parseFloat(document.getElementById('hotelPrice').value) || BUDGET_DEFAULTS.hotelPerNight;
+function toggleSelection(type, itemId) {
+  const arr = APP_STATE.trip.selectedItems[type];
+  const idx = arr.indexOf(itemId);
 
-  const totalKm = ETAPPEN.reduce((sum, e) => sum + e.km, 0);
-  const totalMaut = ETAPPEN.reduce((sum, e) => sum + e.maut, 0);
-  const fuelCost = Math.round((totalKm / 100) * consumption * fuelPrice);
-  const hotelCost = hotelPrice * BUDGET_DEFAULTS.nights;
-
-  // Extra costs from selections
-  let extraHotels = 0;
-  selectedItems.hotels.forEach(i => { extraHotels += HOTELS[i].price; });
-
-  let extraPausen = 0;
-  selectedItems.pausen.forEach(i => {
-    // Verona and Firenze have entry costs
-    const p = PAUSEN[i];
-    if (p.duration >= 60) extraPausen += 10;
-  });
-
-  const extras = extraHotels + extraPausen;
-  const total = totalMaut + fuelCost + hotelCost + extras;
-  const persons = parseInt(document.getElementById('personenInput').value) || BUDGET_DEFAULTS.persons;
-
-  document.getElementById('budgetMaut').textContent = `EUR ${totalMaut}`;
-  document.getElementById('budgetBenzin').textContent = `EUR ${fuelCost}`;
-  document.getElementById('budgetHotels').textContent = `EUR ${hotelCost}`;
-  document.getElementById('budgetTotal').textContent = `EUR ${total}`;
-  document.getElementById('budgetPerPerson').textContent = `EUR ${Math.round(total / persons)} pro Person`;
-
-  // Render extras
-  const extrasContainer = document.getElementById('budgetExtras');
-  let extrasHtml = '';
-  if (extraHotels > 0) {
-    extrasHtml += `<div class="budget-item extra"><span>🏨 Ausgewaehlte Hotels</span><span>+EUR ${extraHotels}</span></div>`;
+  if (idx >= 0) {
+    arr.splice(idx, 1);
+    removeMarkerForItem(type, itemId);
+  } else {
+    arr.push(itemId);
+    addMarkerForItem(type, itemId);
   }
-  if (extraPausen > 0) {
-    extrasHtml += `<div class="budget-item extra"><span>☕ Eintritt/Pausen</span><span>+EUR ${extraPausen}</span></div>`;
-  }
-  extrasContainer.innerHTML = extrasHtml;
+
+  renderOverlayItems(APP_STATE.ui.activeTab);
+  calculateBudget();
+  updateInfoBanner();
+  saveTripToLocalStorage();
 }
 
-// ===== INFO BANNER =====
-function updateInfoBanner() {
-  const banner = document.getElementById('infoBanner');
-  const total = selectedItems.hotels.length + selectedItems.tankstellen.length + selectedItems.pausen.length;
+function calculateBudget() {
+  readInputsIntoState();
+  const { route, legs, pois, selectedItems, inputs } = APP_STATE.trip;
+  const totalKm = route.distanceKm || 0;
+  const toll = legs.reduce((sum, leg) => sum + leg.tollEstimate, 0);
+  const fuel = (totalKm / 100) * inputs.fuelConsumption * inputs.fuelPrice;
+  const hotelNights = Math.max(0, legs.length - 1);
+  const hotels = hotelNights * inputs.hotelPrice;
 
-  if (total === 0) {
+  const extraHotels = selectedItems.hotels.reduce((sum, id) => {
+    const item = pois.hotels.find(entry => entry.id === id);
+    return sum + (item ? item.price : 0);
+  }, 0);
+
+  const extraPausen = selectedItems.pausen.reduce((sum, id) => {
+    const item = pois.pausen.find(entry => entry.id === id);
+    return sum + (item && item.duration >= 45 ? 12 : 0);
+  }, 0);
+
+  const extras = extraHotels + extraPausen;
+  const total = toll + fuel + hotels + extras;
+  const perPerson = total / Math.max(1, inputs.persons);
+
+  APP_STATE.trip.budget = {
+    toll,
+    fuel,
+    hotels,
+    extras,
+    total,
+    perPerson
+  };
+
+  $('budgetDistance').textContent = totalKm ? formatDistance(totalKm) : '-';
+  $('budgetMaut').textContent = formatCurrency(toll);
+  $('budgetBenzin').textContent = formatCurrency(fuel);
+  $('budgetHotels').textContent = formatCurrency(hotels);
+  $('budgetTotal').textContent = formatCurrency(total);
+  $('budgetPerPerson').textContent = `${formatCurrency(perPerson)} pro Person`;
+  $('hotelNightCount').textContent = String(hotelNights);
+
+  let extrasHtml = '';
+  if (extraHotels > 0) {
+    extrasHtml += `<div class="budget-item extra"><span>🏨 Zusatz-Hotels</span><span>+${formatCurrency(extraHotels)}</span></div>`;
+  }
+  if (extraPausen > 0) {
+    extrasHtml += `<div class="budget-item extra"><span>☕ Pausen / Eintritte</span><span>+${formatCurrency(extraPausen)}</span></div>`;
+  }
+  $('budgetExtras').innerHTML = extrasHtml;
+}
+
+function updateInfoBanner() {
+  const selected = APP_STATE.trip.selectedItems;
+  const total = selected.hotels.length + selected.tankstellen.length + selected.pausen.length;
+  const banner = $('infoBanner');
+
+  if (!total) {
     banner.style.display = 'none';
     return;
   }
 
-  let extraCost = 0;
-  selectedItems.hotels.forEach(i => { extraCost += HOTELS[i].price; });
-  selectedItems.pausen.forEach(i => { if (PAUSEN[i].duration >= 60) extraCost += 10; });
-
   const parts = [];
-  if (selectedItems.hotels.length) parts.push(`${selectedItems.hotels.length} Hotel(s)`);
-  if (selectedItems.tankstellen.length) parts.push(`${selectedItems.tankstellen.length} Tankstelle(n)`);
-  if (selectedItems.pausen.length) parts.push(`${selectedItems.pausen.length} Pause(n)`);
+  if (selected.hotels.length) parts.push(`${selected.hotels.length} Hotel(s)`);
+  if (selected.tankstellen.length) parts.push(`${selected.tankstellen.length} Tankstelle(n)`);
+  if (selected.pausen.length) parts.push(`${selected.pausen.length} Pause(n)`);
 
   banner.style.display = 'flex';
-  document.getElementById('bannerText').innerHTML =
-    `<i class="fas fa-check-circle"></i> ${total} Stops ausgewaehlt: ${parts.join(', ')}${extraCost > 0 ? ` | +EUR ${extraCost} Budget` : ''}`;
+  $('bannerText').innerHTML = `<i class="fas fa-check-circle"></i> ${total} Stops ausgewaehlt: ${parts.join(', ')} | Gesamt ${formatCurrency(APP_STATE.trip.budget.total)}`;
 }
 
-// ===== DARK MODE =====
+function updateFooter() {
+  const { inputs, route, legs } = APP_STATE.trip;
+  if (!route.distanceKm) {
+    $('footerRouteText').textContent = 'Reiseplaner v3.0 | Bereit fuer beliebige Autoreisen';
+    return;
+  }
+
+  $('footerRouteText').textContent = `Reiseplaner v3.0 | ${inputs.start} → ${inputs.destination} | ${formatDistance(route.distanceKm)} | ${formatDuration(route.durationMinutes)} | ${legs.length} Etappe(n)`;
+}
+
 function darkModeToggle() {
-  const body = document.documentElement;
-  const isDark = body.getAttribute('data-theme') === 'dark';
-  body.setAttribute('data-theme', isDark ? 'light' : 'dark');
-  const btn = document.getElementById('themeToggle');
-  btn.innerHTML = isDark ? '<i class="fas fa-moon"></i> Dark Mode' : '<i class="fas fa-sun"></i> Light Mode';
+  const root = document.documentElement;
+  const isDark = root.getAttribute('data-theme') === 'dark';
+  root.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  $('themeToggle').innerHTML = isDark
+    ? '<i class="fas fa-moon"></i> Dark Mode'
+    : '<i class="fas fa-sun"></i> Light Mode';
   localStorage.setItem('theme', isDark ? 'light' : 'dark');
 }
 
-// ===== ETAPPEN CARDS =====
-function routeClickHandler(index) {
-  const from = ROUTE[index];
-  const to = ROUTE[index + 1];
-  const bounds = L.latLngBounds([[from.lat, from.lng], [to.lat, to.lng]]);
-  map.fitBounds(bounds, { padding: [50, 50] });
-  markers[index].openPopup();
-  setTimeout(() => markers[index + 1].openPopup(), 500);
+function toggleSidebar() {
+  const sidebar = $('sidebar');
+  const overlay = $('sidebarOverlay');
+  const willOpen = !sidebar.classList.contains('active');
+  sidebar.classList.toggle('active');
+  overlay.classList.toggle('active');
+  if (willOpen) {
+    renderOverlayItems(APP_STATE.ui.activeTab);
+  }
 }
 
-function renderEtappen() {
-  const grid = document.getElementById('etappenGrid');
-  grid.innerHTML = '';
-
-  ETAPPEN.forEach((etappe, i) => {
-    const card = document.createElement('div');
-    card.className = 'etappe-card';
-    card.onclick = () => routeClickHandler(i);
-    card.innerHTML = `
-      <h3><i class="fas fa-route"></i> Etappe ${i + 1}</h3>
-      <div class="detail"><i class="fas fa-map-marker-alt"></i> ${etappe.from} - ${etappe.to}</div>
-      <div class="detail"><i class="fas fa-road"></i> ${etappe.km} km</div>
-      <div class="detail"><i class="fas fa-clock"></i> ~${etappe.hours} Stunden</div>
-      <div class="detail"><i class="fas fa-coins"></i> Maut: EUR ${etappe.maut}</div>
-      <div class="detail" style="margin-top:0.5rem;font-style:italic;opacity:0.7">${etappe.description}</div>
-    `;
-    grid.appendChild(card);
+function switchTab(type) {
+  APP_STATE.ui.activeTab = type;
+  document.querySelectorAll('.overlay-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.tab === type);
   });
+  renderOverlayItems(type);
 }
 
-// ===== CSV EXPORT =====
+function applyRouteMode(mode) {
+  APP_STATE.trip.inputs.routeMode = mode;
+  document.querySelectorAll('.route-opt').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+  if (APP_STATE.trip.route.geometry.length) {
+    APP_STATE.trip.legs = buildLegsFromGeometry(
+      APP_STATE.trip.route.geometry,
+      APP_STATE.trip.route.distanceKm,
+      APP_STATE.trip.route.durationMinutes,
+      APP_STATE.trip.inputs
+    );
+    APP_STATE.trip.pois = generateDynamicPois(APP_STATE.trip.legs);
+    resetSelectionsForNewRoute();
+    clearRouteOverlays();
+    renderRoute();
+    renderEtappen();
+    renderOverlayItems(APP_STATE.ui.activeTab);
+    calculateBudget();
+    updateInfoBanner();
+    updateFooter();
+    saveTripToLocalStorage();
+  }
+}
+
+async function rebuildTrip() {
+  readInputsIntoState();
+  setLoadingState(true);
+
+  try {
+    const start = await geocodeLocation(APP_STATE.trip.inputs.start);
+    const destination = await geocodeLocation(APP_STATE.trip.inputs.destination);
+    const routeData = await fetchRoute(start, destination);
+    const geometry = routeData.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+    const distanceKm = Math.round(routeData.distance / 1000);
+    const durationMinutes = Math.round(routeData.duration / 60);
+
+    APP_STATE.trip.route = {
+      start,
+      destination,
+      geometry,
+      distanceKm,
+      durationMinutes,
+      boundingBox: computeBoundingBox(geometry)
+    };
+
+    APP_STATE.trip.legs = buildLegsFromGeometry(geometry, distanceKm, durationMinutes, APP_STATE.trip.inputs);
+    APP_STATE.trip.pois = generateDynamicPois(APP_STATE.trip.legs);
+    resetSelectionsForNewRoute();
+
+    renderRoute();
+    renderEtappen();
+    renderOverlayItems(APP_STATE.ui.activeTab);
+    calculateBudget();
+    updateInfoBanner();
+    updateFooter();
+    APP_STATE.ui.lastRouteBuiltAt = new Date().toISOString();
+    saveTripToLocalStorage();
+  } catch (error) {
+    console.error(error);
+    APP_STATE.trip.route = { start: null, destination: null, geometry: [], distanceKm: 0, durationMinutes: 0, boundingBox: null };
+    APP_STATE.trip.legs = [];
+    APP_STATE.trip.pois = { hotels: [], tankstellen: [], pausen: [] };
+    resetSelectionsForNewRoute();
+    clearRouteOverlays();
+    calculateBudget();
+    updateInfoBanner();
+    $('etappenGrid').innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
+    $('overlayContent').innerHTML = '<div class="empty-state">Route konnte nicht geladen werden.</div>';
+    $('footerRouteText').textContent = `Reiseplaner v3.0 | Fehler: ${error.message}`;
+  } finally {
+    setLoadingState(false);
+  }
+}
+
 function exportToCSV() {
-  const totalKm = ETAPPEN.reduce((sum, e) => sum + e.km, 0);
+  const { inputs, route, legs, selectedItems, pois, budget } = APP_STATE.trip;
   const rows = [
-    ['Etappe', 'Von', 'Nach', 'Kilometer', 'Stunden', 'Maut (EUR)'],
-    ...ETAPPEN.map((e, i) => [`Etappe ${i + 1}`, e.from, e.to, e.km, e.hours, e.maut]),
-    ['', '', 'GESAMT', totalKm, ETAPPEN.reduce((s, e) => s + e.hours, 0), ETAPPEN.reduce((s, e) => s + e.maut, 0)],
+    ['Start', inputs.start],
+    ['Ziel', inputs.destination],
+    ['Datum', inputs.date],
+    ['Personen', inputs.persons],
+    ['Max km/Tag', inputs.maxKmPerDay],
+    ['Gesamtdistanz', route.distanceKm],
+    ['Gesamtdauer (min)', route.durationMinutes],
     [],
-    ['Budget Position', 'Betrag (EUR)'],
-    ['Maut', document.getElementById('budgetMaut').textContent],
-    ['Benzin', document.getElementById('budgetBenzin').textContent],
-    ['Hotels', document.getElementById('budgetHotels').textContent],
-    ['GESAMT', document.getElementById('budgetTotal').textContent],
+    ['Etappe', 'Von', 'Nach', 'Kilometer', 'Dauer', 'Maut geschaetzt'],
+    ...legs.map((leg, index) => [index + 1, leg.fromLabel, leg.toLabel, leg.km, formatDuration(leg.minutes), leg.tollEstimate]),
     [],
-    ['Ausgewaehlte Stops'],
-    ...selectedItems.hotels.map(i => ['Hotel', HOTELS[i].name, `EUR ${HOTELS[i].price}`]),
-    ...selectedItems.tankstellen.map(i => ['Tankstelle', TANKSTELLEN[i].name, `EUR ${TANKSTELLEN[i].priceLiter}/L`]),
-    ...selectedItems.pausen.map(i => ['Pause', PAUSEN[i].name, `${PAUSEN[i].duration} min`])
+    ['Budget Position', 'Betrag'],
+    ['Maut', Math.round(budget.toll)],
+    ['Kraftstoff', Math.round(budget.fuel)],
+    ['Hotels', Math.round(budget.hotels)],
+    ['Extras', Math.round(budget.extras)],
+    ['Gesamt', Math.round(budget.total)],
+    [],
+    ['Ausgewaehlte Stops']
   ];
 
-  const csv = rows.map(r => r.join(';')).join('\n');
+  selectedItems.hotels.forEach(id => {
+    const item = pois.hotels.find(entry => entry.id === id);
+    if (item) rows.push(['Hotel', item.name, item.price]);
+  });
+  selectedItems.tankstellen.forEach(id => {
+    const item = pois.tankstellen.find(entry => entry.id === id);
+    if (item) rows.push(['Tankstelle', item.name, item.priceLiter.toFixed(2)]);
+  });
+  selectedItems.pausen.forEach(id => {
+    const item = pois.pausen.find(entry => entry.id === id);
+    if (item) rows.push(['Pause', item.name, item.duration]);
+  });
+
+  const csv = rows.map(row => row.join(';')).join('\n');
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = 'reiseplan_frankfurt_santagata.csv';
+  link.download = 'reiseplan_generic.csv';
   link.click();
   URL.revokeObjectURL(link.href);
 }
 
-// ===== JSON EXPORT =====
 function exportAsJSON() {
-  const data = {
-    route: ROUTE,
-    etappen: ETAPPEN,
-    selections: {
-      hotels: selectedItems.hotels.map(i => HOTELS[i]),
-      tankstellen: selectedItems.tankstellen.map(i => TANKSTELLEN[i]),
-      pausen: selectedItems.pausen.map(i => PAUSEN[i])
-    },
-    budget: {
-      maut: document.getElementById('budgetMaut').textContent,
-      benzin: document.getElementById('budgetBenzin').textContent,
-      hotels: document.getElementById('budgetHotels').textContent,
-      gesamt: document.getElementById('budgetTotal').textContent
-    },
-    datum: document.getElementById('dateInput').value,
-    personen: document.getElementById('personenInput').value
-  };
-
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const blob = new Blob([
+    JSON.stringify({ exportedAt: new Date().toISOString(), trip: APP_STATE.trip }, null, 2)
+  ], { type: 'application/json' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = 'reiseplan_config.json';
+  link.download = 'reiseplan_generic.json';
   link.click();
   URL.revokeObjectURL(link.href);
 }
 
-// ===== LOCAL STORAGE =====
-function saveToLocalStorage() {
-  localStorage.setItem('reiseplanerSelections', JSON.stringify(selectedItems));
+function saveTripToLocalStorage() {
+  readInputsIntoState();
+  localStorage.setItem('reiseplanerTripV3', JSON.stringify({
+    trip: APP_STATE.trip,
+    ui: { activeTab: APP_STATE.ui.activeTab }
+  }));
 }
 
-function loadFromLocalStorage() {
-  const saved = localStorage.getItem('reiseplanerSelections');
-  if (!saved) return;
+function restoreSelectedPoiMarkers() {
+  Object.entries(APP_STATE.trip.selectedItems).forEach(([type, ids]) => {
+    ids.forEach(id => addMarkerForItem(type, id));
+  });
+}
+
+function loadTripFromLocalStorage() {
+  const saved = localStorage.getItem('reiseplanerTripV3');
+  if (!saved) return false;
 
   try {
     const data = JSON.parse(saved);
-    selectedItems = data;
+    if (!data.trip) return false;
 
-    // Restore markers
-    Object.keys(selectedItems).forEach(type => {
-      selectedItems[type].forEach(index => {
-        addMarkerForItem(type, index);
-      });
+    APP_STATE.trip = {
+      ...APP_STATE.trip,
+      ...data.trip,
+      inputs: { ...APP_STATE.trip.inputs, ...data.trip.inputs },
+      selectedItems: { hotels: [], tankstellen: [], pausen: [], ...(data.trip.selectedItems || {}) },
+      pois: { hotels: [], tankstellen: [], pausen: [], ...(data.trip.pois || {}) }
+    };
+    APP_STATE.ui.activeTab = data.ui?.activeTab || 'hotels';
+    writeStateToInputs();
+    document.querySelectorAll('.overlay-tab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.tab === APP_STATE.ui.activeTab);
     });
 
-    updateInfoBanner();
-  } catch (e) {
-    // Ignore invalid data
+    if (APP_STATE.trip.route?.geometry?.length) {
+      renderRoute();
+      renderEtappen();
+      renderOverlayItems(APP_STATE.ui.activeTab);
+      restoreSelectedPoiMarkers();
+      calculateBudget();
+      updateInfoBanner();
+      updateFooter();
+      return true;
+    }
+  } catch (error) {
+    console.error('Konnte gespeicherte Reise nicht laden', error);
   }
+
+  return false;
 }
 
-// ===== INIT =====
-document.addEventListener('DOMContentLoaded', () => {
-  // Load saved theme
-  const savedTheme = localStorage.getItem('theme') || 'light';
-  document.documentElement.setAttribute('data-theme', savedTheme);
-  const themeBtn = document.getElementById('themeToggle');
-  if (savedTheme === 'dark') {
-    themeBtn.innerHTML = '<i class="fas fa-sun"></i> Light Mode';
-  }
-
-  initMap();
-  renderEtappen();
-  calculateBudget();
-  loadFromLocalStorage();
-
-  // Event listeners
-  document.getElementById('themeToggle').addEventListener('click', darkModeToggle);
-  document.getElementById('calculateBtn').addEventListener('click', calculateBudget);
-  document.getElementById('exportBtn').addEventListener('click', exportToCSV);
-  document.getElementById('sidebarToggle').addEventListener('click', toggleSidebar);
-  document.getElementById('sidebarClose').addEventListener('click', toggleSidebar);
-  document.getElementById('sidebarOverlay').addEventListener('click', toggleSidebar);
-  document.getElementById('saveRouteBtn').addEventListener('click', () => {
-    saveToLocalStorage();
-    const btn = document.getElementById('saveRouteBtn');
+function bindEventListeners() {
+  $('themeToggle').addEventListener('click', darkModeToggle);
+  $('calculateBtn').addEventListener('click', rebuildTrip);
+  $('exportBtn').addEventListener('click', exportToCSV);
+  $('sidebarToggle').addEventListener('click', toggleSidebar);
+  $('sidebarClose').addEventListener('click', toggleSidebar);
+  $('sidebarOverlay').addEventListener('click', toggleSidebar);
+  $('saveRouteBtn').addEventListener('click', () => {
+    saveTripToLocalStorage();
+    const btn = $('saveRouteBtn');
     btn.innerHTML = '<i class="fas fa-check"></i> Gespeichert!';
-    setTimeout(() => { btn.innerHTML = '<i class="fas fa-save"></i> Route speichern'; }, 2000);
+    setTimeout(() => {
+      btn.innerHTML = '<i class="fas fa-save"></i> Reise speichern';
+    }, 2000);
   });
-  document.getElementById('exportJsonBtn').addEventListener('click', exportAsJSON);
+  $('exportJsonBtn').addEventListener('click', exportAsJSON);
 
-  // Tab switching
   document.querySelectorAll('.overlay-tab').forEach(tab => {
     tab.addEventListener('click', () => switchTab(tab.dataset.tab));
   });
 
-  // Live budget updates
-  ['fuelPrice', 'fuelConsumption', 'hotelPrice', 'personenInput'].forEach(id => {
-    document.getElementById(id).addEventListener('input', calculateBudget);
+  document.querySelectorAll('.route-opt').forEach(btn => {
+    btn.addEventListener('click', () => applyRouteMode(btn.dataset.mode));
   });
+
+  ['fuelPrice', 'fuelConsumption', 'hotelPrice', 'personenInput'].forEach(id => {
+    $(id).addEventListener('input', () => {
+      calculateBudget();
+      saveTripToLocalStorage();
+    });
+  });
+
+  ['startInput', 'zielInput', 'dateInput', 'maxKmPerDayInput'].forEach(id => {
+    $(id).addEventListener('change', saveTripToLocalStorage);
+  });
+}
+
+function initTheme() {
+  const savedTheme = localStorage.getItem('theme') || 'light';
+  document.documentElement.setAttribute('data-theme', savedTheme);
+  if (savedTheme === 'dark') {
+    $('themeToggle').innerHTML = '<i class="fas fa-sun"></i> Light Mode';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  initTheme();
+  initMap();
+  bindEventListeners();
+  writeStateToInputs();
+
+  const restored = loadTripFromLocalStorage();
+  if (!restored) {
+    renderEtappen();
+    renderOverlayItems(APP_STATE.ui.activeTab);
+    calculateBudget();
+    updateFooter();
+    await rebuildTrip();
+  }
 });
