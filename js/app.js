@@ -58,6 +58,11 @@ let markers = [];
 let routingControl = null;
 let hotelLayer, tankLayer, pauseLayer;
 let activeTab = 'hotels';
+let trafficLayer = null;
+let trafficEnabled = false;
+
+// HERE Maps API Key for traffic tiles (https://developer.here.com – kostenloser Free Tier)
+const HERE_API_KEY = 'YOUR_HERE_API_KEY';
 
 let selectedItems = {
   hotels: [],
@@ -369,6 +374,33 @@ function updateInfoBanner() {
     `<i class="fas fa-check-circle"></i> ${total} Stops ausgewaehlt: ${parts.join(', ')}${extraCost > 0 ? ` | +EUR ${extraCost} Budget` : ''}`;
 }
 
+// ===== TRAFFIC LAYER =====
+function toggleTrafficLayer() {
+  trafficEnabled = !trafficEnabled;
+  const btn = document.getElementById('trafficToggle');
+
+  if (trafficEnabled) {
+    trafficLayer = L.tileLayer(
+      `https://{s}.traffic.maps.ls.hereapi.com/maptile/2.1/flowtile/newest/normal.day/{z}/{x}/{y}/256/png8?apiKey=${HERE_API_KEY}`,
+      {
+        attribution: '&copy; <a href="https://www.here.com">HERE Maps</a> Traffic',
+        subdomains: ['1', '2', '3', '4'],
+        maxZoom: 18,
+        opacity: 0.7
+      }
+    ).addTo(map);
+    btn.innerHTML = '<i class="fas fa-traffic-light"></i> Traffic AN';
+    btn.classList.add('active');
+  } else {
+    if (trafficLayer) {
+      map.removeLayer(trafficLayer);
+      trafficLayer = null;
+    }
+    btn.innerHTML = '<i class="fas fa-traffic-light"></i> Traffic';
+    btn.classList.remove('active');
+  }
+}
+
 // ===== DARK MODE =====
 function darkModeToggle() {
   const body = document.documentElement;
@@ -509,6 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Event listeners
   document.getElementById('themeToggle').addEventListener('click', darkModeToggle);
+  document.getElementById('trafficToggle').addEventListener('click', toggleTrafficLayer);
   document.getElementById('calculateBtn').addEventListener('click', calculateBudget);
   document.getElementById('exportBtn').addEventListener('click', exportToCSV);
   document.getElementById('sidebarToggle').addEventListener('click', toggleSidebar);
