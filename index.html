@@ -6,6 +6,8 @@
   <title>Reiseplaner - Frankfurt nach Sant'Agata di Esaro</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -120,6 +122,10 @@
     <button class="overlay-tab" data-tab="tankstellen"><i class="fas fa-gas-pump"></i> Tanken</button>
     <button class="overlay-tab" data-tab="pausen"><i class="fas fa-coffee"></i> Pausen</button>
   </div>
+  <div class="route-toggle">
+    <button class="route-opt active" data-mode="fastest">⚡ Schnellste</button>
+    <button class="route-opt" data-mode="less-toll">🪙 Weniger Maut</button>
+  </div>
   <div id="overlayContent"></div>
   <div class="sidebar-actions">
     <button id="saveRouteBtn" class="btn" style="width:100%;margin-bottom:0.5rem">
@@ -143,6 +149,8 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
