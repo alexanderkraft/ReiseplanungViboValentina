@@ -66,6 +66,7 @@ const APP_STATE = {
   }
 };
 
+
 let map;
 
 function $(id) {
