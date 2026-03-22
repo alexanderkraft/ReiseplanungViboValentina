@@ -1,6 +1,6 @@
 # Reiseplaner - Frankfurt → Sant'Agata di Esaro
 
-Interaktive Reiseplanung für die Route Frankfurt - Innsbruck - Bologna - Sant'Agata di Esaro.
+Interaktive Reiseplanung für Autofahrten in Europa, mit Tanken, Hotels, Restaurants
 
 ## Features
 
@@ -12,20 +12,11 @@ Interaktive Reiseplanung für die Route Frankfurt - Innsbruck - Bologna - Sant'A
 - Mobile Responsive
 
 ## Route
-
-| Etappe | Von | Nach | km | Stunden |
-|--------|-----|------|----|---------|
-| 1 | Frankfurt | Innsbruck | 525 | 6h |
-| 2 | Innsbruck | Bologna | 650 | 7h |
-| 3 | Bologna | Sant'Agata di Esaro | 775 | 8h |
-| **Gesamt** | | | **1.950** | **21h** |
+Vorschlag verschiedener Routen
+Etappensizing
 
 ## Budget (geschätzt)
-
-- Maut: €180
-- Benzin: €280 (7L/100km @ €1,65/L)
-- Hotels: €350 (2 Nächte x €175)
-- **Gesamt: €810 (€405 pro Person)**
+Budgetanalyse BEnzin/Diesel, Hotels, Restaurants, Maut, etc auf der Strecke
 
 ## Tech Stack
 
