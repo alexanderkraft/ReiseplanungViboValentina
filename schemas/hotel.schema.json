@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Hotel",
+  "type": "object",
+  "required": ["id", "name"],
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "lat": { "type": ["number", "null"] },
+    "lng": { "type": ["number", "null"] },
+    "rating": { "type": ["number", "string", "null"] },
+    "price": { "type": ["number", "null"] }
+  }
+}

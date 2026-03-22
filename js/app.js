@@ -1,122 +1,28 @@
-const DEFAULTS = {
-  start: '',
-  destination: '',
-  date: '',
-  persons: 2,
-  maxKmPerDay: 650,
-  fuelPriceLiter: 1.75,
-  fuelConsumption: 7,
-  hotelPerNight: 80,
-  tollPer100Km: 9
-};
+import { DEFAULTS, STORAGE_KEYS } from './core/constants.js';
+import { createInitialState } from './core/state.js';
+import { loadState, saveState } from './core/storage.js';
+import { byId } from './core/utils/dom.js';
+import { escapeHtml, formatCurrency, formatDistance, formatDuration } from './core/utils/format.js';
+import { haversineKm, interpolatePoint } from './core/utils/geo.js';
+import { hasRequiredRouteInputs } from './core/utils/validate.js';
+import { summarizeSelectedItems } from './features/selected-trip/selected-trip-controller.js';
+import { buildBudgetSnapshot } from './features/budget/budget-controller.js';
+import { buildCsvRows, downloadTextFile } from './features/exports/export-controller.js';
+import { readTripInputsFromForm, writeTripInputsToForm } from './features/trip-input/trip-input-controller.js';
+import { getRouteSelectorLabel } from './features/route-planner/route-controller.js';
+import { normalizeHotelPlace } from './domains/hotel/hotel-adapter.js';
+import { normalizePoiPlace } from './domains/poi/poi-adapter.js';
+import { normalizeTankstellePlace } from './domains/tankstelle/tankstelle-adapter.js';
+import { geocodeLocation, reverseGeocodeLocation } from './services/geocoding/nominatim-service.js';
+import { fetchGeoapifyPois, getGeoapifyApiKey } from './services/poi/geoapify-service.js';
+import { fetchOsrmRoutes } from './services/routing/osrm-service.js';
+import { calculateTollEstimate } from './services/toll/toll-service.js';
 
-const APP_STATE = {
-  trip: {
-    inputs: {
-      start: DEFAULTS.start,
-      destination: DEFAULTS.destination,
-      date: DEFAULTS.date,
-      persons: DEFAULTS.persons,
-      maxKmPerDay: DEFAULTS.maxKmPerDay,
-      fuelPrice: DEFAULTS.fuelPriceLiter,
-      fuelConsumption: DEFAULTS.fuelConsumption,
-      hotelPrice: DEFAULTS.hotelPerNight,
-      routeMode: 'balanced',
-      fixedLegCount: 0
-    },
-    routes: [],
-    selectedRouteIndex: 0,
-    route: {
-      start: null,
-      destination: null,
-      geometry: [],
-      distanceKm: 0,
-      durationMinutes: 0,
-      boundingBox: null
-    },
-    legs: [],
-    pois: {
-      hotels: [],
-      tankstellen: [],
-      pausen: []
-    },
-    selectedItems: {
-      hotels: [],
-      tankstellen: [],
-      pausen: []
-    },
-    budget: {
-      toll: 0,
-      fuel: 0,
-      hotels: 0,
-      extras: 0,
-      total: 0,
-      perPerson: 0
-    }
-  },
-  ui: {
-    activeTab: 'hotels',
-    routeLayer: null,
-    markerLayer: null,
-    poiLayers: {
-      hotels: null,
-      tankstellen: null,
-      pausen: null
-    },
-    routeMarkers: [],
-    isLoading: false,
-    lastRouteBuiltAt: null
-  }
-};
-
+const APP_STATE = createInitialState();
 
 let map;
 
-function $(id) {
-  return document.getElementById(id);
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
-function formatCurrency(value) {
-  return `EUR ${Math.round(value)}`;
-}
-
-function formatDistance(value) {
-  return `${Math.round(value)} km`;
-}
-
-function formatDuration(minutes) {
-  const safeMinutes = Math.max(0, Math.round(minutes));
-  const hours = Math.floor(safeMinutes / 60);
-  const mins = safeMinutes % 60;
-  return `${hours}h ${mins}min`;
-}
-
-function haversineKm(a, b) {
-  const toRad = deg => (deg * Math.PI) / 180;
-  const R = 6371;
-  const dLat = toRad(b[0] - a[0]);
-  const dLng = toRad(b[1] - a[1]);
-  const lat1 = toRad(a[0]);
-  const lat2 = toRad(b[0]);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-
-function interpolatePoint(a, b, ratio) {
-  return [
-    a[0] + (b[0] - a[0]) * ratio,
-    a[1] + (b[1] - a[1]) * ratio
-  ];
-}
+const $ = byId;
 
 function setLoadingState(isLoading, message = 'Route wird berechnet ...') {
   APP_STATE.ui.isLoading = isLoading;
@@ -130,14 +36,7 @@ function setLoadingState(isLoading, message = 'Route wird berechnet ...') {
 function readInputsIntoState() {
   APP_STATE.trip.inputs = {
     ...APP_STATE.trip.inputs,
-    start: $('startInput').value.trim(),
-    destination: $('zielInput').value.trim(),
-    date: $('dateInput').value,
-    persons: Math.max(1, parseInt($('personenInput').value, 10) || DEFAULTS.persons),
-    maxKmPerDay: Math.max(150, parseInt($('maxKmPerDayInput').value, 10) || DEFAULTS.maxKmPerDay),
-    fuelPrice: parseFloat($('fuelPrice').value) || DEFAULTS.fuelPriceLiter,
-    fuelConsumption: parseFloat($('fuelConsumption').value) || DEFAULTS.fuelConsumption,
-    hotelPrice: parseFloat($('hotelPrice').value) || DEFAULTS.hotelPerNight,
+    ...readTripInputsFromForm($),
     routeMode: APP_STATE.trip.inputs.routeMode || 'balanced',
     fixedLegCount: APP_STATE.trip.inputs.fixedLegCount || 0
   };
@@ -145,14 +44,7 @@ function readInputsIntoState() {
 
 function writeStateToInputs() {
   const { inputs } = APP_STATE.trip;
-  $('startInput').value = inputs.start;
-  $('zielInput').value = inputs.destination;
-  $('dateInput').value = inputs.date;
-  $('personenInput').value = inputs.persons || DEFAULTS.persons;
-  $('maxKmPerDayInput').value = inputs.maxKmPerDay || DEFAULTS.maxKmPerDay;
-  $('fuelPrice').value = inputs.fuelPrice || DEFAULTS.fuelPriceLiter;
-  $('fuelConsumption').value = inputs.fuelConsumption || DEFAULTS.fuelConsumption;
-  $('hotelPrice').value = inputs.hotelPrice || DEFAULTS.hotelPerNight;
+  writeTripInputsToForm($, inputs);
   document.querySelectorAll('.route-opt').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === inputs.routeMode);
   });
@@ -202,44 +94,6 @@ function clearRouteOverlays() {
   APP_STATE.ui.routeMarkers = [];
 }
 
-async function geocodeLocation(query) {
-  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`;
-  const response = await fetch(url, {
-    headers: { Accept: 'application/json' }
-  });
-
-  if (!response.ok) {
-    throw new Error(`Geocoding fehlgeschlagen (${response.status})`);
-  }
-
-  const results = await response.json();
-  if (!results.length) {
-    throw new Error(`Ort nicht gefunden: ${query}`);
-  }
-
-  const result = results[0];
-  return {
-    name: result.display_name,
-    lat: parseFloat(result.lat),
-    lng: parseFloat(result.lon)
-  };
-}
-
-async function fetchRoutes(start, destination) {
-  const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson&steps=false&alternatives=true`;
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new Error(`Routing fehlgeschlagen (${response.status})`);
-  }
-
-  const data = await response.json();
-  if (!data.routes || !data.routes.length) {
-    throw new Error('Keine Route gefunden');
-  }
-
-  return data.routes.slice(0, 3);
-}
 
 function computeBoundingBox(coords) {
   const bounds = L.latLngBounds(coords.map(coord => [coord[0], coord[1]]));
@@ -330,31 +184,13 @@ function buildLegsFromGeometry(geometry, totalDistanceKm, totalDurationMinutes, 
       fromCoord,
       toCoord,
       midpoint: interpolatePoint(fromCoord, toCoord, 0.5),
-      tollEstimate: Math.round((km / 100) * DEFAULTS.tollPer100Km)
+      tollEstimate: calculateTollEstimate(km, DEFAULTS.tollPer100Km)
     });
   }
 
   return legs;
 }
 
-function getGeoapifyApiKey() {
-  return (typeof window !== 'undefined' && window.GEOAPIFY_API_KEY) || '';
-}
-
-async function fetchGeoapifyPois(lat, lng, category, limit = 5, radiusM = 10000) {
-  const apiKey = getGeoapifyApiKey();
-  if (!apiKey) return [];
-
-  const url = `https://api.geoapify.com/v2/places?categories=${category}&filter=circle:${lng},${lat},${radiusM}&limit=${limit}&apiKey=${apiKey}`;
-  try {
-    const response = await fetch(url);
-    if (!response.ok) return [];
-    const data = await response.json();
-    return (data.features || []).map(f => f.properties);
-  } catch {
-    return [];
-  }
-}
 
 async function fetchRealPois(legs) {
   const apiKey = getGeoapifyApiKey();
@@ -373,57 +209,36 @@ async function fetchRealPois(legs) {
     const legPausen = [];
 
     const hotelFetch = (index < legs.length - 1)
-      ? fetchGeoapifyPois(leg.toCoord[0], leg.toCoord[1], 'accommodation.hotel', 5, 10000)
+      ? fetchGeoapifyPois({ lat: leg.toCoord[0], lng: leg.toCoord[1], category: 'accommodation.hotel', limit: 5, radiusM: 10000 })
       : Promise.resolve([]);
 
-    const tankFetch = fetchGeoapifyPois(leg.midpoint[0], leg.midpoint[1], 'service.vehicle.fuel', 5, 15000);
-    const pauseFetch = fetchGeoapifyPois(leg.midpoint[0], leg.midpoint[1], 'catering.restaurant', 5, 10000);
+    const tankFetch = fetchGeoapifyPois({ lat: leg.midpoint[0], lng: leg.midpoint[1], category: 'service.vehicle.fuel', limit: 5, radiusM: 15000 });
+    const pauseFetch = fetchGeoapifyPois({ lat: leg.midpoint[0], lng: leg.midpoint[1], category: 'catering.restaurant', limit: 5, radiusM: 10000 });
 
     const [hotelResults, tankResults, pauseResults] = await Promise.all([hotelFetch, tankFetch, pauseFetch]);
 
     hotelResults.forEach((p, i) => {
-      const raw = p.datasource?.raw || {};
-      const stars = raw.stars || raw['star_rating'] || '';
-      const rooms = raw.rooms || '';
-      const website = p.website || raw.website || '';
-      const phone = p.contact?.phone || raw.phone || '';
-      legHotels.push({
+      legHotels.push(normalizeHotelPlace(p, {
         id: `hotel-${index + 1}-${i + 1}`,
-        name: p.name || p.address_line1 || `Hotel ${i + 1}`,
-        price: 0,
-        rating: stars || '-',
-        lat: p.lat,
-        lng: p.lon,
-        etappe: index,
-        info: p.address_line2 || p.formatted || '',
-        website,
-        phone,
-        placeId: p.place_id || ''
-      });
+        index: i + 1,
+        etappe: index
+      }));
     });
 
     tankResults.forEach((p, i) => {
-      legTanks.push({
+      legTanks.push(normalizeTankstellePlace(p, {
         id: `tank-${index + 1}-${i + 1}`,
-        name: p.name || p.address_line1 || `Tankstelle ${i + 1}`,
-        priceLiter: 0,
-        lat: p.lat,
-        lng: p.lon,
-        etappe: index,
-        info: p.address_line2 || p.formatted || ''
-      });
+        index: i + 1,
+        etappe: index
+      }));
     });
 
     pauseResults.forEach((p, i) => {
-      legPausen.push({
+      legPausen.push(normalizePoiPlace(p, 'restaurant', {
         id: `pause-${index + 1}-${i + 1}`,
-        name: p.name || p.address_line1 || `Restaurant ${i + 1}`,
-        duration: 30,
-        lat: p.lat,
-        lng: p.lon,
-        etappe: index,
-        description: p.address_line2 || p.formatted || ''
-      });
+        index: i + 1,
+        etappe: index
+      }));
     });
 
     return { legHotels, legTanks, legPausen };
@@ -440,12 +255,8 @@ async function fetchRealPois(legs) {
 }
 
 async function reverseGeocode(lat, lng) {
-  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10`;
   try {
-    const response = await fetch(url, { headers: { Accept: 'application/json' } });
-    if (!response.ok) return null;
-    const data = await response.json();
-    return data.address?.city || data.address?.town || data.address?.village || data.name || null;
+    return await reverseGeocodeLocation(lat, lng);
   } catch {
     return null;
   }
@@ -685,71 +496,50 @@ function toggleSelection(type, itemId) {
 
 function calculateBudget() {
   readInputsIntoState();
-  const { route, legs, pois, selectedItems, inputs } = APP_STATE.trip;
-  const totalKm = route.distanceKm || 0;
-  const toll = legs.reduce((sum, leg) => sum + leg.tollEstimate, 0);
-  const fuel = (totalKm / 100) * inputs.fuelConsumption * inputs.fuelPrice;
-  const hotelNights = Math.max(0, legs.length - 1);
-  const hotels = hotelNights * inputs.hotelPrice;
-
-  const extraHotels = selectedItems.hotels.reduce((sum, id) => {
-    const item = pois.hotels.find(entry => entry.id === id);
-    return sum + (item ? item.price : 0);
-  }, 0);
-
-  const extraPausen = selectedItems.pausen.reduce((sum, id) => {
-    const item = pois.pausen.find(entry => entry.id === id);
-    return sum + (item && item.duration >= 45 ? 12 : 0);
-  }, 0);
-
-  const extras = extraHotels + extraPausen;
-  const total = toll + fuel + hotels + extras;
-  const perPerson = total / Math.max(1, inputs.persons);
-
+  const snapshot = buildBudgetSnapshot(APP_STATE.trip);
   APP_STATE.trip.budget = {
-    toll,
-    fuel,
-    hotels,
-    extras,
-    total,
-    perPerson
+    toll: snapshot.toll,
+    fuel: snapshot.fuel,
+    hotels: snapshot.hotels,
+    extras: snapshot.extras,
+    total: snapshot.total,
+    perPerson: snapshot.perPerson
   };
 
-  $('budgetDistance').textContent = totalKm ? formatDistance(totalKm) : '-';
-  $('budgetMaut').textContent = formatCurrency(toll);
-  $('budgetBenzin').textContent = formatCurrency(fuel);
-  $('budgetHotels').textContent = formatCurrency(hotels);
-  $('budgetTotal').textContent = formatCurrency(total);
-  $('budgetPerPerson').textContent = `${formatCurrency(perPerson)} pro Person`;
-  $('hotelNightCount').textContent = String(hotelNights);
+  $('budgetDistance').textContent = APP_STATE.trip.route.distanceKm ? formatDistance(APP_STATE.trip.route.distanceKm) : '-';
+  $('budgetMaut').textContent = formatCurrency(snapshot.toll);
+  $('budgetBenzin').textContent = formatCurrency(snapshot.fuel);
+  $('budgetHotels').textContent = formatCurrency(snapshot.hotels);
+  $('budgetTotal').textContent = formatCurrency(snapshot.total);
+  $('budgetPerPerson').textContent = `${formatCurrency(snapshot.perPerson)} pro Person`;
+  $('hotelNightCount').textContent = String(snapshot.hotelNights);
 
   let extrasHtml = '';
-  if (extraHotels > 0) {
-    extrasHtml += `<div class="budget-item extra"><span>🏨 Zusatz-Hotels</span><span>+${formatCurrency(extraHotels)}</span></div>`;
+  if (snapshot.extraHotels > 0) {
+    extrasHtml += `<div class="budget-item extra"><span>🏨 Zusatz-Hotels</span><span>+${formatCurrency(snapshot.extraHotels)}</span></div>`;
   }
-  if (extraPausen > 0) {
-    extrasHtml += `<div class="budget-item extra"><span>☕ Pausen / Eintritte</span><span>+${formatCurrency(extraPausen)}</span></div>`;
+  if (snapshot.extraPausen > 0) {
+    extrasHtml += `<div class="budget-item extra"><span>☕ Pausen / Eintritte</span><span>+${formatCurrency(snapshot.extraPausen)}</span></div>`;
   }
   $('budgetExtras').innerHTML = extrasHtml;
 }
 
 function updateInfoBanner() {
-  const selected = APP_STATE.trip.selectedItems;
-  const total = selected.hotels.length + selected.tankstellen.length + selected.pausen.length;
+  const selected = summarizeSelectedItems(APP_STATE.trip.selectedItems);
   const banner = $('infoBanner');
 
-  if (!total) {
+  if (!selected.total) {
     banner.style.display = 'none';
     return;
   }
 
   const parts = [];
-  if (selected.hotels.length) parts.push(`${selected.hotels.length} Hotel(s)`);
-  if (selected.tankstellen.length) parts.push(`${selected.tankstellen.length} Tankstelle(n)`);
-  if (selected.pausen.length) parts.push(`${selected.pausen.length} Pause(n)`);
+  if (selected.hotels) parts.push(`${selected.hotels} Hotel(s)`);
+  if (selected.tankstellen) parts.push(`${selected.tankstellen} Tankstelle(n)`);
+  if (selected.pausen) parts.push(`${selected.pausen} Pause(n)`);
 
   banner.style.display = 'flex';
-  $('bannerText').innerHTML = `<i class="fas fa-check-circle"></i> ${total} Stops ausgewaehlt: ${parts.join(', ')} | Gesamt ${formatCurrency(APP_STATE.trip.budget.total)}`;
+  $('bannerText').innerHTML = `<i class="fas fa-check-circle"></i> ${selected.total} Stops ausgewaehlt: ${parts.join(', ')} | Gesamt ${formatCurrency(APP_STATE.trip.budget.total)}`;
 }
 
 function updateFooter() {
@@ -769,7 +559,7 @@ function darkModeToggle() {
   $('themeToggle').innerHTML = isDark
     ? '<i class="fas fa-moon"></i> Dark Mode'
     : '<i class="fas fa-sun"></i> Light Mode';
-  localStorage.setItem('theme', isDark ? 'light' : 'dark');
+  saveState(STORAGE_KEYS.theme, isDark ? 'light' : 'dark');
 }
 
 function toggleSidebar() {
@@ -890,11 +680,10 @@ function renderRouteSelector() {
   }
 
   container.style.display = 'flex';
-  const labels = ['Route A', 'Route B', 'Route C'];
   container.innerHTML = routes.map((r, i) => {
     const active = i === APP_STATE.trip.selectedRouteIndex ? 'active' : '';
     return `<button class="route-selector-btn ${active}" data-route-idx="${i}">
-      <strong>${labels[i]}</strong>
+      <strong>${getRouteSelectorLabel(i)}</strong>
       <span>${r.distanceKm} km | ${formatDuration(r.durationMinutes)}</span>
     </button>`;
   }).join('');
@@ -940,8 +729,7 @@ async function selectRoute(index) {
 
 async function rebuildTrip() {
   readInputsIntoState();
-  const { start, destination } = APP_STATE.trip.inputs;
-  if (!start || !destination) {
+  if (!hasRequiredRouteInputs(APP_STATE.trip.inputs)) {
     $('etappenGrid').innerHTML = '<div class="empty-state">Bitte Start und Ziel eingeben.</div>';
     return;
   }
@@ -950,14 +738,9 @@ async function rebuildTrip() {
   try {
     const startGeo = await geocodeLocation(APP_STATE.trip.inputs.start);
     const destinationGeo = await geocodeLocation(APP_STATE.trip.inputs.destination);
-    const allRoutes = await fetchRoutes(startGeo, destinationGeo);
+    const allRoutes = await fetchOsrmRoutes({ start: startGeo, destination: destinationGeo });
 
-    APP_STATE.trip.routes = allRoutes.map((r, i) => ({
-      index: i,
-      geometry: r.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
-      distanceKm: Math.round(r.distance / 1000),
-      durationMinutes: Math.round(r.duration / 60)
-    }));
+    APP_STATE.trip.routes = allRoutes;
     APP_STATE.trip.route.start = startGeo;
     APP_STATE.trip.route.destination = destinationGeo;
 
@@ -981,49 +764,13 @@ async function rebuildTrip() {
 }
 
 function exportToCSV() {
-  const { inputs, route, legs, selectedItems, pois, budget } = APP_STATE.trip;
-  const rows = [
-    ['Start', inputs.start],
-    ['Ziel', inputs.destination],
-    ['Datum', inputs.date],
-    ['Personen', inputs.persons],
-    ['Max km/Tag', inputs.maxKmPerDay],
-    ['Gesamtdistanz', route.distanceKm],
-    ['Gesamtdauer (min)', route.durationMinutes],
-    [],
-    ['Etappe', 'Von', 'Nach', 'Kilometer', 'Dauer', 'Maut geschaetzt'],
-    ...legs.map((leg, index) => [index + 1, leg.fromLabel, leg.toLabel, leg.km, formatDuration(leg.minutes), leg.tollEstimate]),
-    [],
-    ['Budget Position', 'Betrag'],
-    ['Maut', Math.round(budget.toll)],
-    ['Kraftstoff', Math.round(budget.fuel)],
-    ['Hotels', Math.round(budget.hotels)],
-    ['Extras', Math.round(budget.extras)],
-    ['Gesamt', Math.round(budget.total)],
-    [],
-    ['Ausgewaehlte Stops']
-  ];
-
-  selectedItems.hotels.forEach(id => {
-    const item = pois.hotels.find(entry => entry.id === id);
-    if (item) rows.push(['Hotel', item.name, item.price]);
-  });
-  selectedItems.tankstellen.forEach(id => {
-    const item = pois.tankstellen.find(entry => entry.id === id);
-    if (item) rows.push(['Tankstelle', item.name, item.priceLiter.toFixed(2)]);
-  });
-  selectedItems.pausen.forEach(id => {
-    const item = pois.pausen.find(entry => entry.id === id);
-    if (item) rows.push(['Pause', item.name, item.duration]);
-  });
-
+  const rows = buildCsvRows(APP_STATE.trip);
   const csv = rows.map(row => row.join(';')).join('\n');
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = 'reiseplan_generic.csv';
-  link.click();
-  URL.revokeObjectURL(link.href);
+  downloadTextFile({
+    content: '\uFEFF' + csv,
+    filename: 'reiseplan_generic.csv',
+    mimeType: 'text/csv;charset=utf-8;'
+  });
 }
 
 function exportAsJSON() {
@@ -1039,10 +786,10 @@ function exportAsJSON() {
 
 function saveTripToLocalStorage() {
   readInputsIntoState();
-  localStorage.setItem('reiseplanerTripV3', JSON.stringify({
+  saveState(STORAGE_KEYS.trip, {
     trip: APP_STATE.trip,
     ui: { activeTab: APP_STATE.ui.activeTab }
-  }));
+  });
 }
 
 function restoreSelectedPoiMarkers() {
@@ -1052,11 +799,9 @@ function restoreSelectedPoiMarkers() {
 }
 
 function loadTripFromLocalStorage() {
-  const saved = localStorage.getItem('reiseplanerTripV3');
-  if (!saved) return false;
-
   try {
-    const data = JSON.parse(saved);
+    const data = loadState(STORAGE_KEYS.trip);
+    if (!data) return false;
     if (!data.trip) return false;
 
     APP_STATE.trip = {
@@ -1141,7 +886,7 @@ function bindEventListeners() {
 }
 
 function initTheme() {
-  const savedTheme = localStorage.getItem('theme') || 'light';
+  const savedTheme = loadState(STORAGE_KEYS.theme) || 'light';
   document.documentElement.setAttribute('data-theme', savedTheme);
   if (savedTheme === 'dark') {
     $('themeToggle').innerHTML = '<i class="fas fa-sun"></i> Light Mode';

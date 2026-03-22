@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Maut",
+  "type": "object",
+  "required": ["provider", "currency"],
+  "properties": {
+    "countryCode": { "type": "string" },
+    "provider": { "type": "string" },
+    "amount": { "type": ["number", "null"] },
+    "currency": { "type": "string" }
+  }
+}
