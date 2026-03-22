@@ -55,12 +55,14 @@ const ROUTE_COLORS = ['#3b82f6', '#10b981', '#f59e0b'];
 // ===== GLOBALS =====
 let map;
 let markers = [];
-let directionsService, directionsRenderer;
-let hotelMarkers = [], tankMarkers = [], pauseMarkers = [];
+let routingControl = null;
+let hotelLayer, tankLayer, pauseLayer;
+let activeTab = 'hotels';
 let trafficLayer = null;
 let trafficEnabled = false;
-let activeTab = 'hotels';
-let openInfoWindow = null;
+
+// HERE Maps API Key for traffic tiles (https://developer.here.com – kostenloser Free Tier)
+const HERE_API_KEY = 'YOUR_HERE_API_KEY';
 
 let selectedItems = {
   hotels: [],
@@ -68,180 +70,93 @@ let selectedItems = {
   pausen: []
 };
 
-// ===== MAP INITIALIZATION (Google Maps callback) =====
+// ===== MAP INITIALIZATION =====
 function initMap() {
-  map = new google.maps.Map(document.getElementById('map'), {
-    center: { lat: 45.5, lng: 12.0 },
-    zoom: 6,
-    mapTypeControl: true,
-    streetViewControl: false,
-    fullscreenControl: true
-  });
+  map = L.map('map').setView([45.5, 12.0], 6);
 
-  // Route waypoint markers
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 18
+  }).addTo(map);
+
+  // Layer groups for interactive markers
+  hotelLayer = L.layerGroup().addTo(map);
+  tankLayer = L.layerGroup().addTo(map);
+  pauseLayer = L.layerGroup().addTo(map);
+
+  // Add route waypoint markers
   ROUTE.forEach((point) => {
-    const marker = new google.maps.Marker({
-      position: { lat: point.lat, lng: point.lng },
-      map,
-      title: `${point.icon} ${point.name}`,
-      icon: createRouteIcon(point.icon)
-    });
-    const iw = new google.maps.InfoWindow({
-      content: `<b style="font-size:1rem">${point.icon} ${point.name}</b>`
-    });
-    marker.addListener('click', () => openIW(iw, marker));
-    marker._infoWindow = iw;
+    const marker = L.marker([point.lat, point.lng]).addTo(map);
+    marker.bindPopup(`<b>${point.icon} ${point.name}</b>`);
     markers.push(marker);
   });
 
+  // OSRM Routing
   initRouting();
-
-  // Theme
-  const savedTheme = localStorage.getItem('theme') || 'light';
-  document.documentElement.setAttribute('data-theme', savedTheme);
-  const themeBtn = document.getElementById('themeToggle');
-  if (savedTheme === 'dark') {
-    themeBtn.innerHTML = '<i class="fas fa-sun"></i> Light Mode';
-  }
-
-  renderEtappen();
-  calculateBudget();
-  loadFromLocalStorage();
-
-  // Event listeners
-  document.getElementById('themeToggle').addEventListener('click', darkModeToggle);
-  document.getElementById('trafficToggle').addEventListener('click', toggleTrafficLayer);
-  document.getElementById('calculateBtn').addEventListener('click', calculateBudget);
-  document.getElementById('exportBtn').addEventListener('click', exportToCSV);
-  document.getElementById('sidebarToggle').addEventListener('click', toggleSidebar);
-  document.getElementById('sidebarClose').addEventListener('click', toggleSidebar);
-  document.getElementById('sidebarOverlay').addEventListener('click', toggleSidebar);
-  document.getElementById('saveRouteBtn').addEventListener('click', () => {
-    saveToLocalStorage();
-    const btn = document.getElementById('saveRouteBtn');
-    btn.innerHTML = '<i class="fas fa-check"></i> Gespeichert!';
-    setTimeout(() => { btn.innerHTML = '<i class="fas fa-save"></i> Route speichern'; }, 2000);
-  });
-  document.getElementById('exportJsonBtn').addEventListener('click', exportAsJSON);
-
-  document.querySelectorAll('.overlay-tab').forEach(tab => {
-    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
-  });
-
-  ['fuelPrice', 'fuelConsumption', 'hotelPrice', 'personenInput'].forEach(id => {
-    document.getElementById(id).addEventListener('input', calculateBudget);
-  });
 }
 
-function openIW(iw, marker) {
-  if (openInfoWindow) openInfoWindow.close();
-  iw.open(map, marker);
-  openInfoWindow = iw;
-}
-
-// ===== ROUTING =====
 function initRouting() {
-  directionsService = new google.maps.DirectionsService();
-  directionsRenderer = new google.maps.DirectionsRenderer({
-    map,
-    suppressMarkers: true,
-    polylineOptions: {
-      strokeColor: '#3b82f6',
-      strokeWeight: 5,
-      strokeOpacity: 0.8
-    }
-  });
+  const waypoints = ROUTE.map(p => L.latLng(p.lat, p.lng));
 
-  const waypoints = ROUTE.slice(1, -1).map(p => ({
-    location: new google.maps.LatLng(p.lat, p.lng),
-    stopover: true
-  }));
+  try {
+    routingControl = L.Routing.control({
+      waypoints: waypoints,
+      router: L.Routing.osrmv1({
+        serviceUrl: 'https://router.project-osrm.org/route/v1',
+        profile: 'car'
+      }),
+      lineOptions: {
+        styles: [{ color: '#3b82f6', weight: 5, opacity: 0.8 }],
+        addWaypoints: false
+      },
+      show: false,
+      addWaypoints: false,
+      draggableWaypoints: false,
+      fitSelectedRoutes: true,
+      createMarker: function() { return null; } // We use our own markers
+    }).addTo(map);
 
-  directionsService.route({
-    origin: new google.maps.LatLng(ROUTE[0].lat, ROUTE[0].lng),
-    destination: new google.maps.LatLng(ROUTE[ROUTE.length - 1].lat, ROUTE[ROUTE.length - 1].lng),
-    waypoints,
-    travelMode: google.maps.TravelMode.DRIVING
-  }, (result, status) => {
-    if (status === 'OK') {
-      directionsRenderer.setDirections(result);
-      const legs = result.routes[0].legs;
-      const totalDist = legs.reduce((s, l) => s + l.distance.value, 0);
-      const totalDur = legs.reduce((s, l) => s + l.duration.value, 0);
-      const km = Math.round(totalDist / 1000);
-      const h = Math.floor(totalDur / 3600);
-      const m = Math.floor((totalDur % 3600) / 60);
+    routingControl.on('routesfound', function(e) {
+      const route = e.routes[0];
+      const totalKm = Math.round(route.summary.totalDistance / 1000);
+      const totalMin = Math.round(route.summary.totalTime / 60);
+      const hours = Math.floor(totalMin / 60);
+      const mins = totalMin % 60;
       document.querySelector('footer p').textContent =
-        `Reiseplaner v3.0 | ${km} km | ${h}h ${m}min | Google Maps Route`;
-    } else {
+        `Reiseplaner v2.0 | ${totalKm} km | ${hours}h ${mins}min | OSRM Route`;
+    });
+
+    routingControl.on('routingerror', function() {
       drawFallbackPolylines();
-    }
-  });
+    });
+  } catch (e) {
+    drawFallbackPolylines();
+  }
 }
 
 function drawFallbackPolylines() {
   for (let i = 0; i < ROUTE.length - 1; i++) {
-    new google.maps.Polyline({
-      path: [
-        { lat: ROUTE[i].lat, lng: ROUTE[i].lng },
-        { lat: ROUTE[i + 1].lat, lng: ROUTE[i + 1].lng }
-      ],
-      strokeColor: ROUTE_COLORS[i],
-      strokeWeight: 4,
-      strokeOpacity: 0.8,
-      map
-    });
+    const start = ROUTE[i];
+    const end = ROUTE[i + 1];
+    L.polyline(
+      [[start.lat, start.lng], [end.lat, end.lng]],
+      { color: ROUTE_COLORS[i], weight: 4, opacity: 0.8, dashArray: '10, 8' }
+    ).addTo(map);
   }
-  const bounds = new google.maps.LatLngBounds();
-  ROUTE.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
-  map.fitBounds(bounds);
+  const bounds = L.latLngBounds(ROUTE.map(p => [p.lat, p.lng]));
+  map.fitBounds(bounds, { padding: [30, 30] });
 }
 
-// ===== CUSTOM MARKER ICONS =====
-function makeSvgIcon(emoji, bgColor) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34">
-    <circle cx="17" cy="17" r="15" fill="${bgColor}" stroke="white" stroke-width="2"/>
-    <text x="17" y="22" text-anchor="middle" font-size="14">${emoji}</text>
-  </svg>`;
-  return {
-    url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
-    scaledSize: new google.maps.Size(34, 34),
-    anchor: new google.maps.Point(17, 17)
-  };
-}
-
-function createRouteIcon(emoji) {
-  return makeSvgIcon(emoji, '#3b82f6');
-}
-
-function createIcon(type) {
-  const configs = {
-    hotels:      { color: '#10b981', emoji: '🏨' },
-    tankstellen: { color: '#f59e0b', emoji: '⛽' },
-    pausen:      { color: '#8b5cf6', emoji: '☕' }
-  };
-  const cfg = configs[type];
-  return makeSvgIcon(cfg.emoji, cfg.color);
-}
-
-// ===== TRAFFIC LAYER =====
-function toggleTrafficLayer() {
-  trafficEnabled = !trafficEnabled;
-  const btn = document.getElementById('trafficToggle');
-
-  if (trafficEnabled) {
-    trafficLayer = new google.maps.TrafficLayer();
-    trafficLayer.setMap(map);
-    btn.innerHTML = '<i class="fas fa-traffic-light"></i> Traffic AN';
-    btn.classList.add('active');
-  } else {
-    if (trafficLayer) {
-      trafficLayer.setMap(null);
-      trafficLayer = null;
-    }
-    btn.innerHTML = '<i class="fas fa-traffic-light"></i> Traffic';
-    btn.classList.remove('active');
-  }
+// ===== CUSTOM MARKERS =====
+function createIcon(type, emoji) {
+  const classMap = { hotels: 'marker-hotel', tankstellen: 'marker-tank', pausen: 'marker-pause' };
+  return L.divIcon({
+    className: '',
+    html: `<div class="custom-marker ${classMap[type]}">${emoji}</div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -18]
+  });
 }
 
 // ===== SIDEBAR =====
@@ -269,11 +184,21 @@ function renderOverlayItems(type) {
   let data, emoji;
 
   switch (type) {
-    case 'hotels':      data = HOTELS;      emoji = '🏨'; break;
-    case 'tankstellen': data = TANKSTELLEN; emoji = '⛽'; break;
-    case 'pausen':      data = PAUSEN;      emoji = '☕'; break;
+    case 'hotels':
+      data = HOTELS;
+      emoji = '🏨';
+      break;
+    case 'tankstellen':
+      data = TANKSTELLEN;
+      emoji = '⛽';
+      break;
+    case 'pausen':
+      data = PAUSEN;
+      emoji = '☕';
+      break;
   }
 
+  // Group by etappe
   const grouped = {};
   data.forEach((item, idx) => {
     if (!grouped[item.etappe]) grouped[item.etappe] = [];
@@ -339,53 +264,46 @@ function toggleSelection(type, index) {
 }
 
 function addMarkerForItem(type, index) {
-  let item, markerArr, popupContent;
+  let item, layer, emoji, popupContent;
 
   switch (type) {
     case 'hotels':
       item = HOTELS[index];
-      markerArr = hotelMarkers;
+      layer = hotelLayer;
+      emoji = '🏨';
       popupContent = `<b>🏨 ${item.name}</b><br>EUR ${item.price}/Nacht<br>Bewertung: ${item.rating}/5`;
       break;
     case 'tankstellen':
       item = TANKSTELLEN[index];
-      markerArr = tankMarkers;
+      layer = tankLayer;
+      emoji = '⛽';
       popupContent = `<b>⛽ ${item.name}</b><br>EUR ${item.priceLiter.toFixed(2)}/Liter`;
       break;
     case 'pausen':
       item = PAUSEN[index];
-      markerArr = pauseMarkers;
+      layer = pauseLayer;
+      emoji = '☕';
       popupContent = `<b>☕ ${item.name}</b><br>${item.duration} min<br>${item.description}`;
       break;
   }
 
-  const marker = new google.maps.Marker({
-    position: { lat: item.lat, lng: item.lng },
-    map,
-    icon: createIcon(type),
-    title: item.name
-  });
-  const iw = new google.maps.InfoWindow({ content: popupContent });
-  marker.addListener('click', () => openIW(iw, marker));
+  const marker = L.marker([item.lat, item.lng], {
+    icon: createIcon(type, emoji)
+  }).addTo(layer);
+  marker.bindPopup(popupContent);
   marker._itemType = type;
   marker._itemIndex = index;
-  marker._infoWindow = iw;
-  openIW(iw, marker);
-  markerArr.push(marker);
+  marker.openPopup();
 }
 
 function removeMarkerForItem(type, index) {
-  const arrMap = { hotels: hotelMarkers, tankstellen: tankMarkers, pausen: pauseMarkers };
-  const arr = arrMap[type];
-  const idx = arr.findIndex(m => m._itemType === type && m._itemIndex === index);
-  if (idx > -1) {
-    if (openInfoWindow === arr[idx]._infoWindow) {
-      openInfoWindow.close();
-      openInfoWindow = null;
+  const layerMap = { hotels: hotelLayer, tankstellen: tankLayer, pausen: pauseLayer };
+  const layer = layerMap[type];
+  layer.eachLayer(m => {
+    if (m._itemType === type && m._itemIndex === index) {
+      layer.removeLayer(m);
     }
-    arr[idx].setMap(null);
-    arr.splice(idx, 1);
-  }
+  });
 }
 
 // ===== BUDGET =====
@@ -399,12 +317,15 @@ function calculateBudget() {
   const fuelCost = Math.round((totalKm / 100) * consumption * fuelPrice);
   const hotelCost = hotelPrice * BUDGET_DEFAULTS.nights;
 
+  // Extra costs from selections
   let extraHotels = 0;
   selectedItems.hotels.forEach(i => { extraHotels += HOTELS[i].price; });
 
   let extraPausen = 0;
   selectedItems.pausen.forEach(i => {
-    if (PAUSEN[i].duration >= 60) extraPausen += 10;
+    // Verona and Firenze have entry costs
+    const p = PAUSEN[i];
+    if (p.duration >= 60) extraPausen += 10;
   });
 
   const extras = extraHotels + extraPausen;
@@ -417,6 +338,7 @@ function calculateBudget() {
   document.getElementById('budgetTotal').textContent = `EUR ${total}`;
   document.getElementById('budgetPerPerson').textContent = `EUR ${Math.round(total / persons)} pro Person`;
 
+  // Render extras
   const extrasContainer = document.getElementById('budgetExtras');
   let extrasHtml = '';
   if (extraHotels > 0) {
@@ -452,6 +374,33 @@ function updateInfoBanner() {
     `<i class="fas fa-check-circle"></i> ${total} Stops ausgewaehlt: ${parts.join(', ')}${extraCost > 0 ? ` | +EUR ${extraCost} Budget` : ''}`;
 }
 
+// ===== TRAFFIC LAYER =====
+function toggleTrafficLayer() {
+  trafficEnabled = !trafficEnabled;
+  const btn = document.getElementById('trafficToggle');
+
+  if (trafficEnabled) {
+    trafficLayer = L.tileLayer(
+      `https://{s}.traffic.maps.ls.hereapi.com/maptile/2.1/flowtile/newest/normal.day/{z}/{x}/{y}/256/png8?apiKey=${HERE_API_KEY}`,
+      {
+        attribution: '&copy; <a href="https://www.here.com">HERE Maps</a> Traffic',
+        subdomains: ['1', '2', '3', '4'],
+        maxZoom: 18,
+        opacity: 0.7
+      }
+    ).addTo(map);
+    btn.innerHTML = '<i class="fas fa-traffic-light"></i> Traffic AN';
+    btn.classList.add('active');
+  } else {
+    if (trafficLayer) {
+      map.removeLayer(trafficLayer);
+      trafficLayer = null;
+    }
+    btn.innerHTML = '<i class="fas fa-traffic-light"></i> Traffic';
+    btn.classList.remove('active');
+  }
+}
+
 // ===== DARK MODE =====
 function darkModeToggle() {
   const body = document.documentElement;
@@ -466,12 +415,10 @@ function darkModeToggle() {
 function routeClickHandler(index) {
   const from = ROUTE[index];
   const to = ROUTE[index + 1];
-  const bounds = new google.maps.LatLngBounds();
-  bounds.extend({ lat: from.lat, lng: from.lng });
-  bounds.extend({ lat: to.lat, lng: to.lng });
-  map.fitBounds(bounds);
-  openIW(markers[index]._infoWindow, markers[index]);
-  setTimeout(() => openIW(markers[index + 1]._infoWindow, markers[index + 1]), 500);
+  const bounds = L.latLngBounds([[from.lat, from.lng], [to.lat, to.lng]]);
+  map.fitBounds(bounds, { padding: [50, 50] });
+  markers[index].openPopup();
+  setTimeout(() => markers[index + 1].openPopup(), 500);
 }
 
 function renderEtappen() {
@@ -564,6 +511,7 @@ function loadFromLocalStorage() {
     const data = JSON.parse(saved);
     selectedItems = data;
 
+    // Restore markers
     Object.keys(selectedItems).forEach(type => {
       selectedItems[type].forEach(index => {
         addMarkerForItem(type, index);
@@ -575,3 +523,45 @@ function loadFromLocalStorage() {
     // Ignore invalid data
   }
 }
+
+// ===== INIT =====
+document.addEventListener('DOMContentLoaded', () => {
+  // Load saved theme
+  const savedTheme = localStorage.getItem('theme') || 'light';
+  document.documentElement.setAttribute('data-theme', savedTheme);
+  const themeBtn = document.getElementById('themeToggle');
+  if (savedTheme === 'dark') {
+    themeBtn.innerHTML = '<i class="fas fa-sun"></i> Light Mode';
+  }
+
+  initMap();
+  renderEtappen();
+  calculateBudget();
+  loadFromLocalStorage();
+
+  // Event listeners
+  document.getElementById('themeToggle').addEventListener('click', darkModeToggle);
+  document.getElementById('trafficToggle').addEventListener('click', toggleTrafficLayer);
+  document.getElementById('calculateBtn').addEventListener('click', calculateBudget);
+  document.getElementById('exportBtn').addEventListener('click', exportToCSV);
+  document.getElementById('sidebarToggle').addEventListener('click', toggleSidebar);
+  document.getElementById('sidebarClose').addEventListener('click', toggleSidebar);
+  document.getElementById('sidebarOverlay').addEventListener('click', toggleSidebar);
+  document.getElementById('saveRouteBtn').addEventListener('click', () => {
+    saveToLocalStorage();
+    const btn = document.getElementById('saveRouteBtn');
+    btn.innerHTML = '<i class="fas fa-check"></i> Gespeichert!';
+    setTimeout(() => { btn.innerHTML = '<i class="fas fa-save"></i> Route speichern'; }, 2000);
+  });
+  document.getElementById('exportJsonBtn').addEventListener('click', exportAsJSON);
+
+  // Tab switching
+  document.querySelectorAll('.overlay-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+  });
+
+  // Live budget updates
+  ['fuelPrice', 'fuelConsumption', 'hotelPrice', 'personenInput'].forEach(id => {
+    document.getElementById(id).addEventListener('input', calculateBudget);
+  });
+});
