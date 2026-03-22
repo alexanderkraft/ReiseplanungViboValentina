@@ -1,12 +1,12 @@
 const DEFAULTS = {
-  start: 'Frankfurt am Main',
-  destination: "Sant'Agata di Esaro",
-  date: '2026-08-13',
+  start: '',
+  destination: '',
+  date: '',
   persons: 2,
   maxKmPerDay: 650,
-  fuelPriceLiter: 1.65,
+  fuelPriceLiter: 1.75,
   fuelConsumption: 7,
-  hotelPerNight: 175,
+  hotelPerNight: 80,
   tollPer100Km: 9
 };
 
@@ -126,9 +126,9 @@ function setLoadingState(isLoading, message = 'Route wird berechnet ...') {
 function readInputsIntoState() {
   APP_STATE.trip.inputs = {
     ...APP_STATE.trip.inputs,
-    start: $('startInput').value.trim() || DEFAULTS.start,
-    destination: $('zielInput').value.trim() || DEFAULTS.destination,
-    date: $('dateInput').value || DEFAULTS.date,
+    start: $('startInput').value.trim(),
+    destination: $('zielInput').value.trim(),
+    date: $('dateInput').value,
     persons: Math.max(1, parseInt($('personenInput').value, 10) || DEFAULTS.persons),
     maxKmPerDay: Math.max(150, parseInt($('maxKmPerDayInput').value, 10) || DEFAULTS.maxKmPerDay),
     fuelPrice: parseFloat($('fuelPrice').value) || DEFAULTS.fuelPriceLiter,
@@ -140,9 +140,9 @@ function readInputsIntoState() {
 
 function writeStateToInputs() {
   const { inputs } = APP_STATE.trip;
-  $('startInput').value = inputs.start || DEFAULTS.start;
-  $('zielInput').value = inputs.destination || DEFAULTS.destination;
-  $('dateInput').value = inputs.date || DEFAULTS.date;
+  $('startInput').value = inputs.start;
+  $('zielInput').value = inputs.destination;
+  $('dateInput').value = inputs.date;
   $('personenInput').value = inputs.persons || DEFAULTS.persons;
   $('maxKmPerDayInput').value = inputs.maxKmPerDay || DEFAULTS.maxKmPerDay;
   $('fuelPrice').value = inputs.fuelPrice || DEFAULTS.fuelPriceLiter;
@@ -291,8 +291,8 @@ function buildLegsFromGeometry(geometry, totalDistanceKm, totalDurationMinutes, 
     const isFirst = i === 0;
     const isLast = i === stopPoints.length - 2;
 
-    const fromLabel = isFirst ? inputs.start : `Etappenstopp ${i}`;
-    const toLabel = isLast ? inputs.destination : `Etappenstopp ${i + 1}`;
+    const fromLabel = isFirst ? inputs.start : `Stopp ${i}`;
+    const toLabel = isLast ? inputs.destination : `Stopp ${i + 1}`;
     const km = totalDistanceKm * (haversineKm(fromCoord, toCoord) / totalKmApprox || 0);
     const ratio = totalKmApprox === 0 ? 0 : haversineKm(fromCoord, toCoord) / totalKmApprox;
     const minutes = Math.max(20, totalDurationMinutes * ratio);
@@ -314,47 +314,151 @@ function buildLegsFromGeometry(geometry, totalDistanceKm, totalDurationMinutes, 
   return legs;
 }
 
-function generateDynamicPois(legs) {
+function getGeoapifyApiKey() {
+  return (typeof window !== 'undefined' && window.GEOAPIFY_API_KEY) || '';
+}
+
+async function fetchGeoapifyPois(lat, lng, category, limit = 5, radiusM = 10000) {
+  const apiKey = getGeoapifyApiKey();
+  if (!apiKey) return [];
+
+  const url = `https://api.geoapify.com/v2/places?categories=${category}&filter=circle:${lng},${lat},${radiusM}&limit=${limit}&apiKey=${apiKey}`;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return (data.features || []).map(f => f.properties);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchRealPois(legs) {
+  const apiKey = getGeoapifyApiKey();
   const hotels = [];
   const tankstellen = [];
   const pausen = [];
 
-  legs.forEach((leg, index) => {
-    if (index < legs.length - 1) {
-      hotels.push({
-        id: `hotel-${index + 1}`,
-        name: `Hotel-Vorschlag Etappe ${index + 1}`,
-        price: 95 + (index * 20),
-        rating: (4.0 + (index * 0.2)).toFixed(1),
-        lat: leg.toCoord[0] + 0.03,
-        lng: leg.toCoord[1] + 0.03,
+  if (!apiKey) {
+    console.warn('Kein Geoapify API-Key konfiguriert. Bitte window.GEOAPIFY_API_KEY in js/config.js setzen.');
+    return { hotels, tankstellen, pausen };
+  }
+
+  const promises = legs.map(async (leg, index) => {
+    const legHotels = [];
+    const legTanks = [];
+    const legPausen = [];
+
+    const hotelFetch = (index < legs.length - 1)
+      ? fetchGeoapifyPois(leg.toCoord[0], leg.toCoord[1], 'accommodation.hotel', 5, 10000)
+      : Promise.resolve([]);
+
+    const tankFetch = fetchGeoapifyPois(leg.midpoint[0], leg.midpoint[1], 'service.vehicle.fuel', 5, 15000);
+    const pauseFetch = fetchGeoapifyPois(leg.midpoint[0], leg.midpoint[1], 'catering.restaurant', 5, 10000);
+
+    const [hotelResults, tankResults, pauseResults] = await Promise.all([hotelFetch, tankFetch, pauseFetch]);
+
+    hotelResults.forEach((p, i) => {
+      legHotels.push({
+        id: `hotel-${index + 1}-${i + 1}`,
+        name: p.name || p.address_line1 || `Hotel ${i + 1}`,
+        price: 0,
+        rating: p.datasource?.raw?.stars || '-',
+        lat: p.lat,
+        lng: p.lon,
         etappe: index,
-        info: `${leg.toLabel} - kurzer Umweg fuer Uebernachtung`
+        info: p.address_line2 || p.formatted || ''
       });
-    }
-
-    tankstellen.push({
-      id: `tank-${index + 1}`,
-      name: `Tankstopp Etappe ${index + 1}`,
-      priceLiter: Math.max(1.55, 1.89 - (index * 0.04)),
-      lat: leg.midpoint[0] + 0.02,
-      lng: leg.midpoint[1] - 0.015,
-      etappe: index,
-      info: `${leg.fromLabel} - ${leg.toLabel}`
     });
 
-    pausen.push({
-      id: `pause-${index + 1}`,
-      name: `Pause Etappe ${index + 1}`,
-      duration: 20 + (index * 15),
-      lat: leg.midpoint[0] - 0.018,
-      lng: leg.midpoint[1] + 0.02,
-      etappe: index,
-      description: `Empfohlene Pause nach etwa ${Math.round(leg.km / 2)} km`
+    tankResults.forEach((p, i) => {
+      legTanks.push({
+        id: `tank-${index + 1}-${i + 1}`,
+        name: p.name || p.address_line1 || `Tankstelle ${i + 1}`,
+        priceLiter: 0,
+        lat: p.lat,
+        lng: p.lon,
+        etappe: index,
+        info: p.address_line2 || p.formatted || ''
+      });
     });
+
+    pauseResults.forEach((p, i) => {
+      legPausen.push({
+        id: `pause-${index + 1}-${i + 1}`,
+        name: p.name || p.address_line1 || `Restaurant ${i + 1}`,
+        duration: 30,
+        lat: p.lat,
+        lng: p.lon,
+        etappe: index,
+        description: p.address_line2 || p.formatted || ''
+      });
+    });
+
+    return { legHotels, legTanks, legPausen };
+  });
+
+  const results = await Promise.all(promises);
+  results.forEach(r => {
+    hotels.push(...r.legHotels);
+    tankstellen.push(...r.legTanks);
+    pausen.push(...r.legPausen);
   });
 
   return { hotels, tankstellen, pausen };
+}
+
+async function reverseGeocode(lat, lng) {
+  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10`;
+  try {
+    const response = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.address?.city || data.address?.town || data.address?.village || data.name || null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveStopNames(legs) {
+  const intermediateLegs = legs.filter((_, i) => i > 0 && i < legs.length);
+  const coords = [];
+
+  legs.forEach((leg, i) => {
+    if (i > 0) {
+      coords.push({ legIndex: i, field: 'fromLabel', coord: leg.fromCoord });
+    }
+    if (i < legs.length - 1) {
+      coords.push({ legIndex: i, field: 'toLabel', coord: leg.toCoord });
+    }
+  });
+
+  const uniqueCoords = [];
+  const seen = new Set();
+  coords.forEach(c => {
+    const key = `${c.coord[0].toFixed(4)},${c.coord[1].toFixed(4)}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueCoords.push({ key, coord: c.coord });
+    }
+  });
+
+  const nameMap = {};
+  const results = await Promise.all(
+    uniqueCoords.map(async uc => {
+      const name = await reverseGeocode(uc.coord[0], uc.coord[1]);
+      return { key: uc.key, name };
+    })
+  );
+  results.forEach(r => { nameMap[r.key] = r.name; });
+
+  coords.forEach(c => {
+    const key = `${c.coord[0].toFixed(4)},${c.coord[1].toFixed(4)}`;
+    const name = nameMap[key];
+    if (name) {
+      legs[c.legIndex][c.field] = name;
+    }
+  });
 }
 
 function resetSelectionsForNewRoute() {
@@ -444,7 +548,11 @@ function renderOverlayItems(type) {
   }
 
   if (!data.length) {
-    container.innerHTML = '<div class="empty-state">Keine Vorschlaege fuer diese Route vorhanden.</div>';
+    const apiKey = getGeoapifyApiKey();
+    const hint = apiKey
+      ? 'Keine Ergebnisse fuer diese Route gefunden.'
+      : 'Bitte Geoapify API-Key in js/config.js konfigurieren (window.GEOAPIFY_API_KEY = "...").';
+    container.innerHTML = `<div class="empty-state">${hint}</div>`;
     return;
   }
 
@@ -657,21 +765,29 @@ function applyRouteMode(mode) {
       APP_STATE.trip.route.durationMinutes,
       APP_STATE.trip.inputs
     );
-    APP_STATE.trip.pois = generateDynamicPois(APP_STATE.trip.legs);
     resetSelectionsForNewRoute();
     clearRouteOverlays();
     renderRoute();
     renderEtappen();
-    renderOverlayItems(APP_STATE.ui.activeTab);
     calculateBudget();
     updateInfoBanner();
     updateFooter();
     saveTripToLocalStorage();
+    fetchRealPois(APP_STATE.trip.legs).then(pois => {
+      APP_STATE.trip.pois = pois;
+      renderOverlayItems(APP_STATE.ui.activeTab);
+      saveTripToLocalStorage();
+    });
   }
 }
 
 async function rebuildTrip() {
   readInputsIntoState();
+  const { start, destination } = APP_STATE.trip.inputs;
+  if (!start || !destination) {
+    $('etappenGrid').innerHTML = '<div class="empty-state">Bitte Start und Ziel eingeben.</div>';
+    return;
+  }
   setLoadingState(true);
 
   try {
@@ -692,16 +808,22 @@ async function rebuildTrip() {
     };
 
     APP_STATE.trip.legs = buildLegsFromGeometry(geometry, distanceKm, durationMinutes, APP_STATE.trip.inputs);
-    APP_STATE.trip.pois = generateDynamicPois(APP_STATE.trip.legs);
     resetSelectionsForNewRoute();
 
     renderRoute();
     renderEtappen();
-    renderOverlayItems(APP_STATE.ui.activeTab);
     calculateBudget();
     updateInfoBanner();
     updateFooter();
     APP_STATE.ui.lastRouteBuiltAt = new Date().toISOString();
+    saveTripToLocalStorage();
+
+    await resolveStopNames(APP_STATE.trip.legs);
+    renderEtappen();
+    renderRoute();
+
+    APP_STATE.trip.pois = await fetchRealPois(APP_STATE.trip.legs);
+    renderOverlayItems(APP_STATE.ui.activeTab);
     saveTripToLocalStorage();
   } catch (error) {
     console.error(error);
@@ -886,6 +1008,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderOverlayItems(APP_STATE.ui.activeTab);
     calculateBudget();
     updateFooter();
-    await rebuildTrip();
   }
 });
