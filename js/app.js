@@ -894,16 +894,24 @@ function initTheme() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  initTheme();
-  initMap();
-  bindEventListeners();
-  writeStateToInputs();
+  try {
+    initTheme();
+    initMap();
+    bindEventListeners();
+    writeStateToInputs();
 
-  const restored = loadTripFromLocalStorage();
-  if (!restored) {
-    renderEtappen();
-    renderOverlayItems(APP_STATE.ui.activeTab);
-    calculateBudget();
-    updateFooter();
+    const restored = loadTripFromLocalStorage();
+    if (!restored) {
+      renderEtappen();
+      renderOverlayItems(APP_STATE.ui.activeTab);
+      calculateBudget();
+      updateFooter();
+    }
+  } catch (error) {
+    console.error('Initialisierung fehlgeschlagen:', error);
+    const mapEl = document.getElementById('map');
+    if (mapEl && !mapEl.querySelector('.leaflet-container')) {
+      mapEl.innerHTML = '<p style="padding:2rem;color:#e44">Fehler beim Laden. Bitte Seite neu laden oder localStorage leeren.</p>';
+    }
   }
 });

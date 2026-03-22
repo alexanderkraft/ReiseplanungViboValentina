@@ -4,5 +4,11 @@ export function saveState(storageKey, payload) {
 
 export function loadState(storageKey) {
   const raw = localStorage.getItem(storageKey);
-  return raw ? JSON.parse(raw) : null;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    localStorage.removeItem(storageKey);
+    return null;
+  }
 }
