@@ -50,7 +50,7 @@ Files:     index.html | css/style.css | js/app.js
 ---
 
 ### 2. ROUTEN- & ETAPPEN-ÜBERSICHT
-
+Beispiel:
 ```
 ┌─ ROUTEN-VORSCHLÄGE (1.950km) ─┐
 │ 🟢 Standard (3 Etappen)       │
@@ -89,7 +89,7 @@ Files:     index.html | css/style.css | js/app.js
 ---
 
 ### 4. INTERAKTIVE AUSWAHL-SIDEBAR
-
+Beispiel:
 ```
 ┌─ AUSWAHL ETAPPE 1 ──────────┐
 │ 🏨 HOTELS (Innsbruck 12 ▼)  │
@@ -118,7 +118,7 @@ Klick-Effekte:
 ---
 
 ### 5. DETAIL-INFO MODAL
-
+Beispiel:
 ```
 ┌─ Pension Rose ──────────────┐
 │ [HOTEL-BILD 400x300]        │
@@ -137,7 +137,7 @@ Klick-Effekte:
 ---
 
 ### 6. AUSGEWÄHLTE ITEMS ÜBERSICHT
-
+Beispiel:
 ```
 ┌─ MEINE REISE (€892) ────────┐
 │ Etappe 1: Berlin→Innsbruck  │
@@ -160,7 +160,7 @@ Klick-Effekte:
 ---
 
 ### 7. ROUTEN-INFO PANEL
-
+Beispiel:
 ```
 ┌─ ROUTE-STATUS ──────────────┐
 │ 🟢 Standard Route            │
