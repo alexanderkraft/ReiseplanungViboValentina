@@ -17,6 +17,7 @@ import { geocodeLocation, reverseGeocodeLocation } from './services/geocoding/no
 import { fetchGeoapifyPois, getGeoapifyApiKey } from './services/poi/geoapify-service.js';
 import { fetchOsrmRoutes } from './services/routing/osrm-service.js';
 import { calculateTollEstimate } from './services/toll/toll-service.js';
+import { enrichHotelWithPricing } from './services/hotel/xotelo-service.js';
 
 const APP_STATE = createInitialState();
 
@@ -203,6 +204,10 @@ async function fetchRealPois(legs) {
     return { hotels, tankstellen, pausen };
   }
 
+  const inputs = APP_STATE.trip.inputs;
+  const travelDate = inputs.date || '';
+  const persons = Math.max(1, Number(inputs.persons || 1));
+
   const promises = legs.map(async (leg, index) => {
     const legHotels = [];
     const legTanks = [];
@@ -224,6 +229,17 @@ async function fetchRealPois(legs) {
         etappe: index
       }));
     });
+
+    if (travelDate && legHotels.length > 0) {
+      const checkIn = computeCheckInDate(travelDate, index);
+      const checkOut = computeCheckOutDate(checkIn);
+      await Promise.all(legHotels.map(async (hotel) => {
+        await enrichHotelWithPricing(hotel, checkIn, checkOut);
+        if (hotel.pricePerNight > 0) {
+          hotel.price = hotel.pricePerNight;
+        }
+      }));
+    }
 
     tankResults.forEach((p, i) => {
       legTanks.push(normalizeTankstellePlace(p, {
@@ -252,6 +268,18 @@ async function fetchRealPois(legs) {
   });
 
   return { hotels, tankstellen, pausen };
+}
+
+function computeCheckInDate(travelDate, legIndex) {
+  const d = new Date(travelDate);
+  d.setDate(d.getDate() + legIndex);
+  return d.toISOString().slice(0, 10);
+}
+
+function computeCheckOutDate(checkIn) {
+  const d = new Date(checkIn);
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
 }
 
 async function reverseGeocode(lat, lng) {
@@ -413,7 +441,14 @@ function renderOverlayItems(type) {
       let infoText = '';
 
       if (type === 'hotels') {
-        priceText = item.rating !== '-' ? `${item.rating} &#9733;` : '';
+        const ratingStr = item.rating !== '-' ? `${item.rating} &#9733;` : '';
+        if (item.pricePerNight > 0) {
+          priceText = `<span class="hotel-price-value">&euro;${item.pricePerNight}/N</span>`;
+          if (ratingStr) priceText += `<br>${ratingStr}`;
+          priceText += `<br><span class="hotel-price-source">via ${escapeHtml(item.priceSource)}</span>`;
+        } else {
+          priceText = ratingStr || '';
+        }
         infoText = item.info;
       } else if (type === 'tankstellen') {
         priceText = '';
@@ -454,7 +489,7 @@ function addMarkerForItem(type, itemId) {
   if (!layer || !item) return;
 
   const config = {
-    hotels: { emoji: '🏨', popup: `<b>🏨 ${escapeHtml(item.name)}</b><br>${item.rating !== '-' ? item.rating + ' &#9733;' : ''}<br>${escapeHtml(item.info)}${item.website ? '<br><a href="' + escapeHtml(item.website) + '" target="_blank">Website</a>' : ''}` },
+    hotels: { emoji: '🏨', popup: `<b>🏨 ${escapeHtml(item.name)}</b><br>${item.rating !== '-' ? item.rating + ' &#9733;' : ''}${item.pricePerNight > 0 ? '<br>💰 €' + item.pricePerNight + '/Nacht (via ' + escapeHtml(item.priceSource) + ')' : ''}<br>${escapeHtml(item.info)}${item.website ? '<br><a href="' + escapeHtml(item.website) + '" target="_blank">Website</a>' : ''}` },
     tankstellen: { emoji: '⛽', popup: `<b>⛽ ${escapeHtml(item.name)}</b><br>${escapeHtml(item.info)}` },
     pausen: { emoji: '☕', popup: `<b>☕ ${escapeHtml(item.name)}</b><br>${item.duration} min<br>${escapeHtml(item.description)}` }
   }[type];

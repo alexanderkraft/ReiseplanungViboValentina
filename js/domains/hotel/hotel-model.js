@@ -11,6 +11,10 @@ export function createHotelModel(overrides = {}) {
     phone: '',
     placeId: '',
     etappe: null,
+    xoteloKey: '',
+    pricePerNight: 0,
+    priceSource: '',
+    allRates: [],
     ...overrides
   };
 }
