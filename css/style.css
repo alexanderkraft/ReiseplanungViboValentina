@@ -197,10 +197,6 @@ header h1 {
   box-shadow: 0 4px 20px var(--shadow);
 }
 
-/* Hide OSRM routing instructions panel */
-.leaflet-routing-container {
-  display: none !important;
-}
 
 .etappen-section {
   margin-top: 1.5rem;
@@ -479,22 +475,6 @@ header h1 {
   pointer-events: auto;
 }
 
-/* Custom map markers */
-.custom-marker {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  font-size: 16px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-  border: 2px solid white;
-}
-
-.marker-hotel { background: #10b981; }
-.marker-tank { background: #f59e0b; }
-.marker-pause { background: #8b5cf6; }
 
 footer {
   text-align: center;
