@@ -501,6 +501,75 @@ footer {
   background: #059669;
 }
 
+/* ===== ROUTE TOGGLE (Schnellste / Weniger Maut) ===== */
+.route-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.route-opt {
+  flex: 1;
+  padding: 0.5rem 0.3rem;
+  border: 2px solid var(--glass-border);
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.route-opt:hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.route-opt.active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
+}
+
+/* ===== LOADING SPINNER ===== */
+.loading-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 2rem 1rem;
+  opacity: 0.8;
+  font-size: 0.9rem;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* ===== LIVE BADGE ===== */
+.live-badge {
+  background: #ef4444;
+  color: white;
+  padding: 0.15rem 0.45rem;
+  border-radius: 1rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.live-indicator {
+  display: inline-block;
+  font-size: 0.62rem;
+  background: #10b981;
+  color: white;
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.3rem;
+  margin-left: 0.3rem;
+  vertical-align: middle;
+}
+
 @media (max-width: 768px) {
   header {
     padding: 1rem;
