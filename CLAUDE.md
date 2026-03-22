@@ -34,32 +34,36 @@ Files:     index.html | css/style.css | js/app.js
 
 ```
 ┌─ REISE-EINGABE ─────────────┐
-│ Startort:      [Berlin ▼] 📍│
-│ Zielort:       [Sant'Agata ▼]│
-│ Ankunftsdatum: [13.08.2026] 📅│
-│ Personen:      [2 ▼]         │
-│ Max. km/Tag:   [650 ▼] km   │
+│ Startort:      [        ] 📍│  ← leer, User tippt
+│ Zielort:       [        ]   │  ← leer, User tippt
+│ Ankunftsdatum: [        ] 📅│  ← leer, User waehlt
+│ Personen:      [2 ▼]         │  ← generischer Default
+│ Max. km/Tag:   [650 ▼] km   │  ← generischer Default
 │ [🔮 Routen berechnen]        │
 └─────────────────────────────┘
 ```
 
+**WICHTIG: Keine hardcoded Reisedaten!** Start, Ziel und Datum starten LEER.
+Nur universelle Defaults (Personen, km/Tag, Verbrauch) sind vorbelegt.
+Beispiele in dieser Datei (Berlin, Sant'Agata, etc.) dienen nur der Illustration.
+
 - Autocomplete via Google Places API (Start & Ziel)
 - Kalender-Picker für Datum
 - Slider für max. km/Tag
+- Validierung: Route nur berechenbar wenn Start UND Ziel ausgefuellt
 
 ---
 
 ### 2. ROUTEN- & ETAPPEN-ÜBERSICHT
-Beispiel:
+Beispiel (Illustration – echte Daten kommen dynamisch via OSRM + Reverse-Geocoding):
 ```
-┌─ ROUTEN-VORSCHLÄGE (1.950km) ─┐
-│ 🟢 Standard (3 Etappen)       │
-│   1. Berlin→Innsbruck 525km   │
-│   2. Innsbruck→Bologna 650km  │
-│   3. Bologna→Sant'Agata 775km │
+┌─ ROUTEN-VORSCHLÄGE (Xkm) ────┐
+│ 🟢 Ausgewogen (N Etappen)     │
+│   1. [Start]→[Ort A] Xkm     │
+│   2. [Ort A]→[Ort B] Xkm     │
+│   3. [Ort B]→[Ziel] Xkm      │
 │                               │
-│ 🔵 Budget (3 Etappen)        │
-│ 🟡 Komfort (4 Etappen)       │
+│ 🛌 Kuerzere Tage (N+1 Etappen)│
 │ [👆 Ziehe Etappen] [➕ Stopp] │
 └───────────────────────────────┘
 ```
@@ -89,22 +93,19 @@ Beispiel:
 ---
 
 ### 4. INTERAKTIVE AUSWAHL-SIDEBAR
-Beispiel:
+POIs werden dynamisch via **Geoapify Places API** geladen (keine Fake-Daten!).
+Beispiel (Illustration):
 ```
 ┌─ AUSWAHL ETAPPE 1 ──────────┐
-│ 🏨 HOTELS (Innsbruck 12 ▼)  │
-│   Pension Rose €70 ⭐4.3 ✓  │
-│   Hotel Brenner €95 ⭐4.1   │
+│ 🏨 HOTELS (N ▼)             │
+│   [Echtes Hotel] €XX ⭐X.X ✓│
+│   [Echtes Hotel] €XX ⭐X.X  │
 │                              │
-│ ⛽ TANKS (5 ▼)               │
-│   OMV A12 1.74€ ✓           │
-│   Aral Innsbruck 1.78€      │
+│ ⛽ TANKSTELLEN (N ▼)         │
+│   [Echte Tankstelle] ✓      │
 │                              │
-│ 🍽️ RESTAURANTS (8 ▼)        │
-│   Trattoria €25pp ⭐4.5 ✓   │
-│                              │
-│ 🏞️ POIs (15 ▼)              │
-│   Brennerpass FREE ✓        │
+│ ☕ RESTAURANTS (N ▼)         │
+│   [Echtes Restaurant] ✓     │
 │ [🔍 Filter: Preis ▼]         │
 └─────────────────────────────┘
 ```
@@ -118,17 +119,16 @@ Klick-Effekte:
 ---
 
 ### 5. DETAIL-INFO MODAL
-Beispiel:
+Beispiel (Illustration – echte Daten aus Geoapify):
 ```
-┌─ Pension Rose ──────────────┐
+┌─ [Hotel-Name] ──────────────┐
 │ [HOTEL-BILD 400x300]        │
 │                              │
-│ 💰 €70/Nacht (2 Pers.)      │
-│ ⭐ 4.3 (128 Bewertungen)     │
-│ 📍 2.3km von Route (+3min)  │
+│ 💰 €XX/Nacht (N Pers.)      │
+│ ⭐ X.X (N Bewertungen)       │
+│ 📍 X.Xkm von Route (+Xmin)  │
 │ 🅿️ 🥐 🚗 ♿ WiFi ✓           │
 │                              │
-│ "Gemütlich, familiengeführt"│
 │ [Google Maps] [Booking]     │
 │ [➕ Route] [♥ Favorit]      │
 └─────────────────────────────┘
@@ -137,19 +137,19 @@ Beispiel:
 ---
 
 ### 6. AUSGEWÄHLTE ITEMS ÜBERSICHT
-Beispiel:
+Beispiel (Illustration – alle Werte dynamisch):
 ```
-┌─ MEINE REISE (€892) ────────┐
-│ Etappe 1: Berlin→Innsbruck  │
-│ 🏨 Pension Rose €70 ✓       │
-│ ⛽ OMV Tank 1.74€ €12 ✓     │
-│ 🏞️ Brennerpass FREE ✓       │
-│ Subtotal: €82               │
+┌─ MEINE REISE (€XXX) ────────┐
+│ Etappe 1: [Start]→[Ort A]  │
+│ 🏨 [Hotel] €XX ✓            │
+│ ⛽ [Tankstelle] ✓            │
+│ ☕ [Restaurant] ✓            │
+│ Subtotal: €XX               │
 │ ─────────────────────────── │
 │ Etappe 2: ...               │
 │ ─────────────────────────── │
-│ Gesamt: 1.950km | 21h 15m   │
-│ Budget: €892 (2 Pers.)      │
+│ Gesamt: Xkm | Xh Xm        │
+│ Budget: €XXX (N Pers.)      │
 │ [📊 Excel] [💾 PDF] [✉️ Share]│
 └─────────────────────────────┘
 ```
@@ -160,14 +160,14 @@ Beispiel:
 ---
 
 ### 7. ROUTEN-INFO PANEL
-Beispiel:
+Beispiel (Illustration – alle Werte dynamisch berechnet):
 ```
 ┌─ ROUTE-STATUS ──────────────┐
-│ 🟢 Standard Route            │
-│ 1.950km | 21h 15min | €180  │
-│ 🚦 2 Staus (+22min)         │
-│ 🏗️ 1 Baustelle A12          │
-│ 📊 Verkehr: Mittel 🟡        │
+│ 🟢 Aktuelle Route            │
+│ Xkm | Xh Xmin | €XXX       │
+│ 🚦 Staus (live)             │
+│ 🏗️ Baustellen (live)        │
+│ 📊 Verkehr: [Status]        │
 │                              │
 │ [Google Maps Link]          │
 │ [Waze] [OSM] [Export GPX]   │
@@ -217,3 +217,6 @@ Beispiel:
 4. **API Keys niemals ins Repo** – immer `js/config.js` + `.gitignore`
 5. **Leaflet bleibt die Kartenbibliothek** – kein Wechsel zu Google Maps
 6. **OSRM bleibt der Router** – kostenlos, kein API Key nötig
+7. **Keine reise-spezifischen Daten hardcoden** – Start, Ziel, Datum, POIs, Etappen muessen IMMER dynamisch vom User eingegeben oder via API geladen werden. Nur universelle Defaults (Personen=2, km/Tag=650, Verbrauch=7) sind erlaubt.
+8. **POIs immer von echten APIs laden** – Geoapify Places API fuer Hotels, Tankstellen, Restaurants. Keine Fake-Daten oder Formeln fuer Preise/Ratings.
+9. **Etappennamen per Reverse-Geocoding** – Zwischenstopps erhalten echte Ortsnamen via Nominatim, nicht generische Labels.
