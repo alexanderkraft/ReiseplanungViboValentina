@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Trip",
+  "type": "object",
+  "required": ["inputs"],
+  "properties": {
+    "inputs": { "type": "object" },
+    "route": { "type": ["object", "null"] },
+    "legs": { "type": "array" },
+    "budget": { "type": ["object", "null"] }
+  }
+}
