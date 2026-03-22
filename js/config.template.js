@@ -1,8 +1,6 @@
 // API Configuration Template
+// Copy this file to js/config.js and fill in your keys.
+// js/config.js is in .gitignore and will NOT be committed.
 
-const config = {
-    googlePlacesAPIKey: '<YOUR_GOOGLE_PLACES_API_KEY>',
-    geoapifyKey: '<YOUR_GEOAPIFY_KEY>',
-};
-
-module.exports = config;
+window.GEOAPIFY_API_KEY = '<YOUR_GEOAPIFY_KEY>';
+// window.GOOGLE_PLACES_API_KEY = '<YOUR_GOOGLE_PLACES_API_KEY>';
