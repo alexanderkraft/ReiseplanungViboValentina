@@ -30,6 +30,17 @@ jobs:
           window.GEOAPIFY_API_KEY = '${{ secrets.GEOAPIFY_API_KEY }}';
           SCRIPT
 
+      - name: Inject version info
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          cat > js/version.js << SCRIPT
+          window.APP_VERSION = {
+            branch: '${{ github.ref_name }}',
+            commit: '${SHORT_SHA}',
+            buildDate: '$(date -u +%Y-%m-%dT%H:%M:%SZ)'
+          };
+          SCRIPT
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

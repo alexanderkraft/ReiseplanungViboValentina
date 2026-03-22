@@ -21,6 +21,12 @@ import { enrichHotelWithPricing } from './services/hotel/xotelo-service.js';
 
 const APP_STATE = createInitialState();
 
+function versionTag() {
+  const v = window.APP_VERSION;
+  if (!v) return 'dev';
+  return `${v.branch}@${v.commit}`;
+}
+
 let map;
 
 const $ = byId;
@@ -580,11 +586,11 @@ function updateInfoBanner() {
 function updateFooter() {
   const { inputs, route, legs } = APP_STATE.trip;
   if (!route.distanceKm) {
-    $('footerRouteText').textContent = 'Reiseplaner v3.0 | Bereit fuer beliebige Autoreisen';
+    $('footerRouteText').textContent = `Reiseplaner v3.0 (${versionTag()}) | Bereit fuer beliebige Autoreisen`;
     return;
   }
 
-  $('footerRouteText').textContent = `Reiseplaner v3.0 | ${inputs.start} → ${inputs.destination} | ${formatDistance(route.distanceKm)} | ${formatDuration(route.durationMinutes)} | ${legs.length} Etappe(n)`;
+  $('footerRouteText').textContent = `Reiseplaner v3.0 (${versionTag()}) | ${inputs.start} → ${inputs.destination} | ${formatDistance(route.distanceKm)} | ${formatDuration(route.durationMinutes)} | ${legs.length} Etappe(n)`;
 }
 
 function darkModeToggle() {
@@ -792,7 +798,7 @@ async function rebuildTrip() {
     updateInfoBanner();
     $('etappenGrid').innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
     $('overlayContent').innerHTML = '<div class="empty-state">Route konnte nicht geladen werden.</div>';
-    $('footerRouteText').textContent = `Reiseplaner v3.0 | Fehler: ${error.message}`;
+    $('footerRouteText').textContent = `Reiseplaner v3.0 (${versionTag()}) | Fehler: ${error.message}`;
   } finally {
     setLoadingState(false);
   }
