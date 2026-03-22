@@ -554,10 +554,54 @@ header h1 {
   text-decoration: underline;
 }
 
+.overlay-item-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
 .overlay-item-price {
   font-weight: 700;
   font-size: 0.95rem;
   white-space: nowrap;
+}
+
+.hotel-price-input {
+  display: flex;
+  align-items: center;
+}
+
+.hotel-price-field {
+  width: 5.5rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 0.4rem;
+  font-size: 0.8rem;
+  text-align: right;
+  background: var(--card-bg);
+  color: var(--text);
+}
+
+.hotel-price-field:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.overlay-item.selected .hotel-price-field {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.booking-link {
+  color: #e67e22;
+}
+
+.overlay-item.selected .booking-link {
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .overlay-item.selected .overlay-item-info {

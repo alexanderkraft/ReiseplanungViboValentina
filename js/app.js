@@ -380,6 +380,46 @@ function zoomToLeg(index) {
   map.fitBounds(bounds, { padding: [60, 60] });
 }
 
+function getCheckinDateForLeg(legIndex) {
+  const dateStr = APP_STATE.trip.inputs.date;
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  d.setDate(d.getDate() + legIndex);
+  return d;
+}
+
+function formatDateISO(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function buildHotelBookingLinks(hotel, legIndex) {
+  const checkin = getCheckinDateForLeg(legIndex);
+  const nameEncoded = encodeURIComponent(hotel.name);
+  let links = '';
+
+  if (checkin) {
+    const checkout = new Date(checkin);
+    checkout.setDate(checkout.getDate() + 1);
+    const ci = formatDateISO(checkin);
+    const co = formatDateISO(checkout);
+
+    const bookingUrl = `https://www.booking.com/searchresults.html?ss=${nameEncoded}&checkin=${ci}&checkout=${co}`;
+    links += ` <a href="${bookingUrl}" target="_blank" rel="noopener" class="poi-link booking-link" onclick="event.stopPropagation()" title="Preis auf Booking.com nachschlagen"><i class="fas fa-bed"></i> Booking</a>`;
+
+    const googleUrl = `https://www.google.com/travel/hotels?q=${nameEncoded}&dates=${ci},${co}`;
+    links += ` <a href="${googleUrl}" target="_blank" rel="noopener" class="poi-link booking-link" onclick="event.stopPropagation()" title="Preis auf Google Hotels nachschlagen"><i class="fas fa-search-dollar"></i> Google Hotels</a>`;
+  } else {
+    const bookingUrl = `https://www.booking.com/searchresults.html?ss=${nameEncoded}`;
+    links += ` <a href="${bookingUrl}" target="_blank" rel="noopener" class="poi-link booking-link" onclick="event.stopPropagation()"><i class="fas fa-bed"></i> Booking</a>`;
+  }
+
+  return links;
+}
+
 function renderOverlayItems(type) {
   const container = $('overlayContent');
   const data = APP_STATE.trip.pois[type] || [];
@@ -429,6 +469,19 @@ function renderOverlayItems(type) {
         extraLinks += ` <a href="${escapeHtml(item.website)}" target="_blank" rel="noopener" class="poi-link" onclick="event.stopPropagation()"><i class="fas fa-globe"></i> Web</a>`;
       }
 
+      if (type === 'hotels') {
+        const bookingLinks = buildHotelBookingLinks(item, legIndex);
+        extraLinks += bookingLinks;
+      }
+
+      const priceInput = type === 'hotels'
+        ? `<div class="hotel-price-input" onclick="event.stopPropagation()">
+             <input type="number" min="0" step="1" placeholder="€/Nacht"
+                    class="hotel-price-field" data-hotel-id="${item.id}"
+                    value="${item.price || ''}" />
+           </div>`
+        : '';
+
       html += `
         <div class="overlay-item ${isSelected ? 'selected' : ''}" data-type="${type}" data-id="${item.id}">
           <div class="overlay-item-left">
@@ -436,7 +489,10 @@ function renderOverlayItems(type) {
             <div class="overlay-item-info">${escapeHtml(infoText)}</div>
             <div class="overlay-item-links">${extraLinks}</div>
           </div>
-          <div class="overlay-item-price">${priceText}</div>
+          <div class="overlay-item-right">
+            <div class="overlay-item-price">${priceText}</div>
+            ${priceInput}
+          </div>
         </div>
       `;
     });
@@ -445,6 +501,18 @@ function renderOverlayItems(type) {
   container.innerHTML = html;
   container.querySelectorAll('.overlay-item').forEach(item => {
     item.addEventListener('click', () => toggleSelection(item.dataset.type, item.dataset.id));
+  });
+  container.querySelectorAll('.hotel-price-field').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const hotelId = e.target.dataset.hotelId;
+      const hotel = (APP_STATE.trip.pois.hotels || []).find(h => h.id === hotelId);
+      if (hotel) {
+        hotel.price = parseFloat(e.target.value) || 0;
+        calculateBudget();
+        updateInfoBanner();
+        saveTripToLocalStorage();
+      }
+    });
   });
 }
 
@@ -894,16 +962,24 @@ function initTheme() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  initTheme();
-  initMap();
-  bindEventListeners();
-  writeStateToInputs();
+  try {
+    initTheme();
+    initMap();
+    bindEventListeners();
+    writeStateToInputs();
 
-  const restored = loadTripFromLocalStorage();
-  if (!restored) {
-    renderEtappen();
-    renderOverlayItems(APP_STATE.ui.activeTab);
-    calculateBudget();
-    updateFooter();
+    const restored = loadTripFromLocalStorage();
+    if (!restored) {
+      renderEtappen();
+      renderOverlayItems(APP_STATE.ui.activeTab);
+      calculateBudget();
+      updateFooter();
+    }
+  } catch (error) {
+    console.error('Initialisierung fehlgeschlagen:', error);
+    const mapEl = document.getElementById('map');
+    if (mapEl && !mapEl.querySelector('.leaflet-container')) {
+      mapEl.innerHTML = '<p style="padding:2rem;color:#e44">Fehler beim Laden. Bitte Seite neu laden oder localStorage leeren.</p>';
+    }
   }
 });
