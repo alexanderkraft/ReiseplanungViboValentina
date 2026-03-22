@@ -245,6 +245,73 @@ header h1 {
   font-size: 1.3rem;
 }
 
+.route-selector {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.route-selector-btn {
+  flex: 1;
+  min-width: 140px;
+  padding: 0.75rem 1rem;
+  border: 2px solid var(--glass-border);
+  border-radius: 12px;
+  background: var(--card-bg);
+  color: var(--text);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.route-selector-btn strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.route-selector-btn span {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.route-selector-btn:hover {
+  border-color: var(--primary);
+}
+
+.route-selector-btn.active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+.route-selector-btn.active span {
+  opacity: 0.9;
+}
+
+.etappen-controls {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.etappen-controls label {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.etappen-controls select,
+.etappen-controls input[type="number"] {
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
 .etappen-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -470,6 +537,21 @@ header h1 {
 .overlay-item-info {
   font-size: 0.75rem;
   opacity: 0.7;
+}
+
+.overlay-item-links {
+  margin-top: 0.25rem;
+}
+
+.poi-link {
+  font-size: 0.75rem;
+  color: var(--primary);
+  text-decoration: none;
+  margin-right: 0.75rem;
+}
+
+.poi-link:hover {
+  text-decoration: underline;
 }
 
 .overlay-item-price {

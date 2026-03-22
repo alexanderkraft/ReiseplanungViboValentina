@@ -66,6 +66,20 @@
           <h2><i class="fas fa-route"></i> Etappen</h2>
           <span id="routeSummaryBadge" class="live-indicator">Bereit</span>
         </div>
+        <div class="etappen-controls" id="etappenControls" style="display:none">
+          <label><i class="fas fa-list-ol"></i> Etappen:</label>
+          <select id="etappenCountSelect">
+            <option value="auto">Auto (nach km/Tag)</option>
+            <option value="1">1 Etappe</option>
+            <option value="2">2 Etappen</option>
+            <option value="3">3 Etappen</option>
+            <option value="4">4 Etappen</option>
+            <option value="5">5 Etappen</option>
+            <option value="6">6 Etappen</option>
+          </select>
+          <label><i class="fas fa-road"></i> Max. km/Tag:</label>
+          <input type="number" id="etappenKmInput" value="650" min="150" max="1200" step="50">
+        </div>
         <div id="etappenGrid" class="etappen-grid"></div>
       </div>
     </div>
@@ -132,7 +146,7 @@
     <button class="route-opt active" data-mode="balanced">🧭 Ausgewogen</button>
     <button class="route-opt" data-mode="short-day">🛌 Kuerzere Tage</button>
   </div>
-  <p class="sidebar-note">Die Vorschlaege werden bei jeder neuen Route automatisch aus den aktuellen Etappen erzeugt.</p>
+  <p class="sidebar-note">Hotels, Tankstellen und Restaurants werden live via Geoapify geladen.</p>
   <div id="overlayContent"></div>
   <div class="sidebar-actions">
     <button id="saveRouteBtn" class="btn" style="width:100%;margin-bottom:0.5rem">

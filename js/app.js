@@ -21,8 +21,11 @@ const APP_STATE = {
       fuelPrice: DEFAULTS.fuelPriceLiter,
       fuelConsumption: DEFAULTS.fuelConsumption,
       hotelPrice: DEFAULTS.hotelPerNight,
-      routeMode: 'balanced'
+      routeMode: 'balanced',
+      fixedLegCount: 0
     },
+    routes: [],
+    selectedRouteIndex: 0,
     route: {
       start: null,
       destination: null,
@@ -134,7 +137,8 @@ function readInputsIntoState() {
     fuelPrice: parseFloat($('fuelPrice').value) || DEFAULTS.fuelPriceLiter,
     fuelConsumption: parseFloat($('fuelConsumption').value) || DEFAULTS.fuelConsumption,
     hotelPrice: parseFloat($('hotelPrice').value) || DEFAULTS.hotelPerNight,
-    routeMode: APP_STATE.trip.inputs.routeMode || 'balanced'
+    routeMode: APP_STATE.trip.inputs.routeMode || 'balanced',
+    fixedLegCount: APP_STATE.trip.inputs.fixedLegCount || 0
   };
 }
 
@@ -220,8 +224,8 @@ async function geocodeLocation(query) {
   };
 }
 
-async function fetchRoute(start, destination) {
-  const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson&steps=false`;
+async function fetchRoutes(start, destination) {
+  const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson&steps=false&alternatives=true`;
   const response = await fetch(url);
 
   if (!response.ok) {
@@ -233,7 +237,7 @@ async function fetchRoute(start, destination) {
     throw new Error('Keine Route gefunden');
   }
 
-  return data.routes[0];
+  return data.routes.slice(0, 3);
 }
 
 function computeBoundingBox(coords) {
@@ -245,10 +249,6 @@ function buildLegsFromGeometry(geometry, totalDistanceKm, totalDurationMinutes, 
   if (geometry.length < 2) {
     return [];
   }
-
-  const targetKm = inputs.routeMode === 'short-day'
-    ? Math.max(150, inputs.maxKmPerDay - 100)
-    : inputs.maxKmPerDay;
 
   const segmentDistances = [];
   let accumulated = 0;
@@ -262,21 +262,43 @@ function buildLegsFromGeometry(geometry, totalDistanceKm, totalDurationMinutes, 
   const totalKmApprox = accumulated || totalDistanceKm;
   const stopPoints = [geometry[0]];
 
-  let runningKm = 0;
-  let nextBreakAt = targetKm;
-  for (let i = 0; i < segmentDistances.length; i++) {
-    const start = geometry[i];
-    const end = geometry[i + 1];
-    const segmentKm = segmentDistances[i];
+  const fixedLegs = inputs.fixedLegCount || 0;
 
-    while (runningKm + segmentKm >= nextBreakAt && nextBreakAt < totalKmApprox - 20) {
-      const remainingToBreak = nextBreakAt - runningKm;
-      const ratio = segmentKm === 0 ? 0 : remainingToBreak / segmentKm;
-      stopPoints.push(interpolatePoint(start, end, Math.min(1, Math.max(0, ratio))));
-      nextBreakAt += targetKm;
+  if (fixedLegs > 0) {
+    const segmentTarget = totalKmApprox / fixedLegs;
+    let runningKm = 0;
+    let nextBreakAt = segmentTarget;
+    for (let i = 0; i < segmentDistances.length; i++) {
+      const start = geometry[i];
+      const end = geometry[i + 1];
+      const segmentKm = segmentDistances[i];
+      while (runningKm + segmentKm >= nextBreakAt && stopPoints.length < fixedLegs) {
+        const remainingToBreak = nextBreakAt - runningKm;
+        const ratio = segmentKm === 0 ? 0 : remainingToBreak / segmentKm;
+        stopPoints.push(interpolatePoint(start, end, Math.min(1, Math.max(0, ratio))));
+        nextBreakAt += segmentTarget;
+      }
+      runningKm += segmentKm;
     }
+  } else {
+    const targetKm = inputs.routeMode === 'short-day'
+      ? Math.max(150, inputs.maxKmPerDay - 100)
+      : inputs.maxKmPerDay;
 
-    runningKm += segmentKm;
+    let runningKm = 0;
+    let nextBreakAt = targetKm;
+    for (let i = 0; i < segmentDistances.length; i++) {
+      const start = geometry[i];
+      const end = geometry[i + 1];
+      const segmentKm = segmentDistances[i];
+      while (runningKm + segmentKm >= nextBreakAt && nextBreakAt < totalKmApprox - 20) {
+        const remainingToBreak = nextBreakAt - runningKm;
+        const ratio = segmentKm === 0 ? 0 : remainingToBreak / segmentKm;
+        stopPoints.push(interpolatePoint(start, end, Math.min(1, Math.max(0, ratio))));
+        nextBreakAt += targetKm;
+      }
+      runningKm += segmentKm;
+    }
   }
 
   stopPoints.push(geometry[geometry.length - 1]);
@@ -359,15 +381,23 @@ async function fetchRealPois(legs) {
     const [hotelResults, tankResults, pauseResults] = await Promise.all([hotelFetch, tankFetch, pauseFetch]);
 
     hotelResults.forEach((p, i) => {
+      const raw = p.datasource?.raw || {};
+      const stars = raw.stars || raw['star_rating'] || '';
+      const rooms = raw.rooms || '';
+      const website = p.website || raw.website || '';
+      const phone = p.contact?.phone || raw.phone || '';
       legHotels.push({
         id: `hotel-${index + 1}-${i + 1}`,
         name: p.name || p.address_line1 || `Hotel ${i + 1}`,
         price: 0,
-        rating: p.datasource?.raw?.stars || '-',
+        rating: stars || '-',
         lat: p.lat,
         lng: p.lon,
         etappe: index,
-        info: p.address_line2 || p.formatted || ''
+        info: p.address_line2 || p.formatted || '',
+        website,
+        phone,
+        placeId: p.place_id || ''
       });
     });
 
@@ -571,14 +601,20 @@ function renderOverlayItems(type) {
       let infoText = '';
 
       if (type === 'hotels') {
-        priceText = `${formatCurrency(item.price)}`;
-        infoText = `Bewertung: ${item.rating}/5`;
+        priceText = item.rating !== '-' ? `${item.rating} &#9733;` : '';
+        infoText = item.info;
       } else if (type === 'tankstellen') {
-        priceText = `EUR ${item.priceLiter.toFixed(2)}/L`;
+        priceText = '';
         infoText = item.info;
       } else {
-        priceText = `${item.duration} min`;
+        priceText = '';
         infoText = item.description;
+      }
+
+      const mapsLink = `https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lng}`;
+      let extraLinks = `<a href="${mapsLink}" target="_blank" rel="noopener" class="poi-link" onclick="event.stopPropagation()"><i class="fas fa-map-marker-alt"></i> Maps</a>`;
+      if (type === 'hotels' && item.website) {
+        extraLinks += ` <a href="${escapeHtml(item.website)}" target="_blank" rel="noopener" class="poi-link" onclick="event.stopPropagation()"><i class="fas fa-globe"></i> Web</a>`;
       }
 
       html += `
@@ -586,6 +622,7 @@ function renderOverlayItems(type) {
           <div class="overlay-item-left">
             <div class="overlay-item-name">${isSelected ? '&#10003; ' : ''}${escapeHtml(item.name)}</div>
             <div class="overlay-item-info">${escapeHtml(infoText)}</div>
+            <div class="overlay-item-links">${extraLinks}</div>
           </div>
           <div class="overlay-item-price">${priceText}</div>
         </div>
@@ -605,8 +642,8 @@ function addMarkerForItem(type, itemId) {
   if (!layer || !item) return;
 
   const config = {
-    hotels: { emoji: '🏨', popup: `<b>🏨 ${escapeHtml(item.name)}</b><br>${formatCurrency(item.price)}/Nacht<br>Bewertung: ${item.rating}/5` },
-    tankstellen: { emoji: '⛽', popup: `<b>⛽ ${escapeHtml(item.name)}</b><br>EUR ${item.priceLiter.toFixed(2)}/Liter` },
+    hotels: { emoji: '🏨', popup: `<b>🏨 ${escapeHtml(item.name)}</b><br>${item.rating !== '-' ? item.rating + ' &#9733;' : ''}<br>${escapeHtml(item.info)}${item.website ? '<br><a href="' + escapeHtml(item.website) + '" target="_blank">Website</a>' : ''}` },
+    tankstellen: { emoji: '⛽', popup: `<b>⛽ ${escapeHtml(item.name)}</b><br>${escapeHtml(item.info)}` },
     pausen: { emoji: '☕', popup: `<b>☕ ${escapeHtml(item.name)}</b><br>${item.duration} min<br>${escapeHtml(item.description)}` }
   }[type];
 
@@ -781,6 +818,125 @@ function applyRouteMode(mode) {
   }
 }
 
+function rebuildLegsFromControls() {
+  if (!APP_STATE.trip.route.geometry.length) return;
+  readInputsIntoState();
+  const sel = $('etappenCountSelect').value;
+  const kmInput = $('etappenKmInput');
+
+  if (sel === 'auto') {
+    APP_STATE.trip.inputs.fixedLegCount = 0;
+    APP_STATE.trip.inputs.maxKmPerDay = Math.max(150, parseInt(kmInput.value, 10) || 650);
+    $('maxKmPerDayInput').value = APP_STATE.trip.inputs.maxKmPerDay;
+  } else {
+    APP_STATE.trip.inputs.fixedLegCount = parseInt(sel, 10);
+    const approxKm = Math.round(APP_STATE.trip.route.distanceKm / APP_STATE.trip.inputs.fixedLegCount);
+    kmInput.value = approxKm;
+    APP_STATE.trip.inputs.maxKmPerDay = approxKm;
+    $('maxKmPerDayInput').value = approxKm;
+  }
+
+  APP_STATE.trip.legs = buildLegsFromGeometry(
+    APP_STATE.trip.route.geometry,
+    APP_STATE.trip.route.distanceKm,
+    APP_STATE.trip.route.durationMinutes,
+    APP_STATE.trip.inputs
+  );
+  resetSelectionsForNewRoute();
+  clearRouteOverlays();
+  renderRoute();
+  renderEtappen();
+  calculateBudget();
+  updateInfoBanner();
+  updateFooter();
+  saveTripToLocalStorage();
+
+  resolveStopNames(APP_STATE.trip.legs).then(() => {
+    renderEtappen();
+    renderRoute();
+  });
+
+  fetchRealPois(APP_STATE.trip.legs).then(pois => {
+    APP_STATE.trip.pois = pois;
+    renderOverlayItems(APP_STATE.ui.activeTab);
+    saveTripToLocalStorage();
+  });
+}
+
+function showEtappenControls() {
+  const controls = $('etappenControls');
+  if (controls) {
+    controls.style.display = 'flex';
+    $('etappenKmInput').value = APP_STATE.trip.inputs.maxKmPerDay;
+    const legCount = APP_STATE.trip.inputs.fixedLegCount;
+    $('etappenCountSelect').value = legCount > 0 ? String(legCount) : 'auto';
+  }
+}
+
+function renderRouteSelector() {
+  let container = $('routeSelector');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'routeSelector';
+    container.className = 'route-selector';
+    $('etappenGrid').parentElement.insertBefore(container, $('etappenGrid'));
+  }
+
+  const routes = APP_STATE.trip.routes;
+  if (routes.length <= 1) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'flex';
+  const labels = ['Route A', 'Route B', 'Route C'];
+  container.innerHTML = routes.map((r, i) => {
+    const active = i === APP_STATE.trip.selectedRouteIndex ? 'active' : '';
+    return `<button class="route-selector-btn ${active}" data-route-idx="${i}">
+      <strong>${labels[i]}</strong>
+      <span>${r.distanceKm} km | ${formatDuration(r.durationMinutes)}</span>
+    </button>`;
+  }).join('');
+
+  container.querySelectorAll('.route-selector-btn').forEach(btn => {
+    btn.addEventListener('click', () => selectRoute(parseInt(btn.dataset.routeIdx, 10)));
+  });
+}
+
+async function selectRoute(index) {
+  APP_STATE.trip.selectedRouteIndex = index;
+  const chosen = APP_STATE.trip.routes[index];
+  if (!chosen) return;
+
+  APP_STATE.trip.route = {
+    ...APP_STATE.trip.route,
+    geometry: chosen.geometry,
+    distanceKm: chosen.distanceKm,
+    durationMinutes: chosen.durationMinutes,
+    boundingBox: computeBoundingBox(chosen.geometry)
+  };
+
+  APP_STATE.trip.legs = buildLegsFromGeometry(chosen.geometry, chosen.distanceKm, chosen.durationMinutes, APP_STATE.trip.inputs);
+  resetSelectionsForNewRoute();
+  renderRouteSelector();
+  showEtappenControls();
+  renderRoute();
+  renderEtappen();
+  calculateBudget();
+  updateInfoBanner();
+  updateFooter();
+  APP_STATE.ui.lastRouteBuiltAt = new Date().toISOString();
+  saveTripToLocalStorage();
+
+  await resolveStopNames(APP_STATE.trip.legs);
+  renderEtappen();
+  renderRoute();
+
+  APP_STATE.trip.pois = await fetchRealPois(APP_STATE.trip.legs);
+  renderOverlayItems(APP_STATE.ui.activeTab);
+  saveTripToLocalStorage();
+}
+
 async function rebuildTrip() {
   readInputsIntoState();
   const { start, destination } = APP_STATE.trip.inputs;
@@ -791,40 +947,21 @@ async function rebuildTrip() {
   setLoadingState(true);
 
   try {
-    const start = await geocodeLocation(APP_STATE.trip.inputs.start);
-    const destination = await geocodeLocation(APP_STATE.trip.inputs.destination);
-    const routeData = await fetchRoute(start, destination);
-    const geometry = routeData.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-    const distanceKm = Math.round(routeData.distance / 1000);
-    const durationMinutes = Math.round(routeData.duration / 60);
+    const startGeo = await geocodeLocation(APP_STATE.trip.inputs.start);
+    const destinationGeo = await geocodeLocation(APP_STATE.trip.inputs.destination);
+    const allRoutes = await fetchRoutes(startGeo, destinationGeo);
 
-    APP_STATE.trip.route = {
-      start,
-      destination,
-      geometry,
-      distanceKm,
-      durationMinutes,
-      boundingBox: computeBoundingBox(geometry)
-    };
+    APP_STATE.trip.routes = allRoutes.map((r, i) => ({
+      index: i,
+      geometry: r.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
+      distanceKm: Math.round(r.distance / 1000),
+      durationMinutes: Math.round(r.duration / 60)
+    }));
+    APP_STATE.trip.route.start = startGeo;
+    APP_STATE.trip.route.destination = destinationGeo;
 
-    APP_STATE.trip.legs = buildLegsFromGeometry(geometry, distanceKm, durationMinutes, APP_STATE.trip.inputs);
-    resetSelectionsForNewRoute();
-
-    renderRoute();
-    renderEtappen();
-    calculateBudget();
-    updateInfoBanner();
-    updateFooter();
-    APP_STATE.ui.lastRouteBuiltAt = new Date().toISOString();
-    saveTripToLocalStorage();
-
-    await resolveStopNames(APP_STATE.trip.legs);
-    renderEtappen();
-    renderRoute();
-
-    APP_STATE.trip.pois = await fetchRealPois(APP_STATE.trip.legs);
-    renderOverlayItems(APP_STATE.ui.activeTab);
-    saveTripToLocalStorage();
+    renderRouteSelector();
+    await selectRoute(0);
   } catch (error) {
     console.error(error);
     APP_STATE.trip.route = { start: null, destination: null, geometry: [], distanceKm: 0, durationMinutes: 0, boundingBox: null };
@@ -983,8 +1120,22 @@ function bindEventListeners() {
     });
   });
 
-  ['startInput', 'zielInput', 'dateInput', 'maxKmPerDayInput'].forEach(id => {
+  ['startInput', 'zielInput', 'dateInput'].forEach(id => {
     $(id).addEventListener('change', saveTripToLocalStorage);
+  });
+
+  $('maxKmPerDayInput').addEventListener('change', () => {
+    $('etappenKmInput').value = $('maxKmPerDayInput').value;
+    $('etappenCountSelect').value = 'auto';
+    APP_STATE.trip.inputs.fixedLegCount = 0;
+    rebuildLegsFromControls();
+  });
+
+  $('etappenCountSelect').addEventListener('change', rebuildLegsFromControls);
+  $('etappenKmInput').addEventListener('change', () => {
+    $('etappenCountSelect').value = 'auto';
+    APP_STATE.trip.inputs.fixedLegCount = 0;
+    rebuildLegsFromControls();
   });
 }
 
