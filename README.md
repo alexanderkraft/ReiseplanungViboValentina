@@ -1,5 +1,4 @@
-# Reiseplaner - Frankfurt → Sant'Agata di Esaro
-
+# Reiseplaner 
 Interaktive Reiseplanung für Autofahrten in Europa, mit Tanken, Hotels, Restaurants
 
 ## Features
@@ -16,7 +15,7 @@ Vorschlag verschiedener Routen
 Etappensizing
 
 ## Budget (geschätzt)
-Budgetanalyse BEnzin/Diesel, Hotels, Restaurants, Maut, etc auf der Strecke
+Budgetanalyse Benzin/Diesel, Hotels, Restaurants, Maut, etc auf der Strecke
 
 ## Tech Stack
 
